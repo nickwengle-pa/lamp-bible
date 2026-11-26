@@ -247,6 +247,31 @@ export default function BibleReaderView({
     loadChapter(book, chapter, translation);
   }, [book, chapter, translation, loadChapter]);
 
+  // Lock background scroll on mobile & allow Escape key when the Verse Study modal is open
+  useEffect(() => {
+    if (!selectedVerse) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !shareOpen) {
+        setSelectedVerse(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    const isMobileModal = window.innerWidth < 1024;
+    const prevOverflow = document.body.style.overflow;
+    if (isMobileModal) {
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (isMobileModal) {
+        document.body.style.overflow = prevOverflow;
+      }
+    };
+  }, [selectedVerse, shareOpen]);
+
   // Auto-scroll highlighted verse into view (only in full-screen reader so embedded home view stays at top)
   useEffect(() => {
     if (embedded || !activeHighlight || !chapterData) return;
@@ -738,66 +763,87 @@ export default function BibleReaderView({
           </div>
         </div>
 
-        {/* Contextual Verse Insight Drawer */}
+        {/* Contextual Verse Insight Drawer (Modal overlay on phone/tablet, sticky side panel on desktop) */}
         {selectedVerse && (
-          <aside className="lg:col-span-5 lg:sticky lg:top-20 rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#DFC9A3] dark:border-[#4A3A22] shadow-lg overflow-hidden">
-            <div className="px-5 py-4 bg-[#FAF4E8] dark:bg-[#251E15] border-b border-[#E9D7B6] dark:border-[#3C301E] flex items-center justify-between">
-              <div>
-                <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164]">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Lamp Verse Study
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Verse study for ${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setSelectedVerse(null);
+            }}
+            className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none lg:block lg:p-0 lg:col-span-5 lg:sticky lg:top-20"
+          >
+            <aside className="w-full max-h-[88dvh] sm:max-w-lg lg:max-w-none lg:max-h-none flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border-t sm:border border-[#DFC9A3] dark:border-[#4A3A22] shadow-2xl lg:shadow-lg overflow-hidden">
+              {/* Mobile sheet drag handle */}
+              <div className="lg:hidden pt-2.5 pb-0.5 bg-[#FAF4E8] dark:bg-[#251E15] flex justify-center shrink-0">
+                <span className="w-10 h-1 rounded-full bg-[#D7C29E] dark:bg-[#4A3A22]" />
+              </div>
+
+              <div className="px-5 py-3.5 sm:py-4 bg-[#FAF4E8] dark:bg-[#251E15] border-b border-[#E9D7B6] dark:border-[#3C301E] flex items-center justify-between shrink-0">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164]">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Lamp Verse Study
+                    {loadingInsight && (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-[#F7EAD0] dark:bg-[#3A2D1B] px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-[#7B531A] dark:text-[#DFB164]">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        Loading AI
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="font-serif text-xl font-semibold mt-0.5">
+                    {selectedVerse.book_name} {selectedVerse.chapter}:
+                    {selectedVerse.verse}
+                  </h2>
                 </div>
-                <h2 className="font-serif text-xl font-semibold mt-0.5">
-                  {selectedVerse.book_name} {selectedVerse.chapter}:
-                  {selectedVerse.verse}
-                </h2>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShareOpen(true)}
+                    title="Share Scripture Card"
+                    className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-black/25 border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] inline-flex items-center gap-1.5 transition"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    Share
+                  </button>
+                  <button
+                    onClick={() => setSelectedVerse(null)}
+                    aria-label="Close verse study"
+                    className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setShareOpen(true)}
-                  title="Share Scripture Card"
-                  className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-black/25 border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] inline-flex items-center gap-1.5 transition"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  Share
-                </button>
-                <button
-                  onClick={() => setSelectedVerse(null)}
-                  className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+
+              {/* 4-Tab Bible Word Study Action Bar */}
+              <div className="grid grid-cols-4 border-b border-[#EFE8DC] dark:border-[#2A2520] bg-[#FAF7F2] dark:bg-[#171411] text-[11px] font-semibold shrink-0">
+                {(
+                  [
+                    { id: "explain", label: "Explain" },
+                    { id: "original", label: "Original" },
+                    { id: "deep", label: "Deep Study" },
+                    { id: "related", label: "Related" },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setDrawerTab(tab.id)}
+                    className={`py-2.5 text-center border-b-2 transition ${
+                      drawerTab === tab.id
+                        ? "border-[#9A6B24] text-[#9A6B24] dark:text-[#DFB164] bg-[#FDFCFA] dark:bg-[#1D1A17]"
+                        : "border-transparent text-[#6B635B] dark:text-[#A39A90] hover:text-[#1C1917] dark:hover:text-[#F5F0E8]"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
-            </div>
 
-            {/* 4-Tab Bible Word Study Action Bar */}
-            <div className="grid grid-cols-4 border-b border-[#EFE8DC] dark:border-[#2A2520] bg-[#FAF7F2] dark:bg-[#171411] text-[11px] font-semibold">
-              {(
-                [
-                  { id: "explain", label: "Explain" },
-                  { id: "original", label: "Original" },
-                  { id: "deep", label: "Deep Study" },
-                  { id: "related", label: "Related" },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setDrawerTab(tab.id)}
-                  className={`py-2.5 text-center border-b-2 transition ${
-                    drawerTab === tab.id
-                      ? "border-[#9A6B24] text-[#9A6B24] dark:text-[#DFB164] bg-[#FDFCFA] dark:bg-[#1D1A17]"
-                      : "border-transparent text-[#6B635B] dark:text-[#A39A90] hover:text-[#1C1917] dark:hover:text-[#F5F0E8]"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="p-5 max-h-[75vh] overflow-y-auto space-y-5">
-              <blockquote className="font-serif italic text-base leading-relaxed pl-3.5 border-l-2 border-[#B88435] text-[#3F3A35] dark:text-[#DED6CB]">
+              <div className="p-5 flex-1 min-h-0 overflow-y-auto overscroll-contain lg:max-h-[75vh] space-y-5">
+                <blockquote className="font-serif italic text-sm sm:text-base leading-relaxed pl-3.5 border-l-2 border-[#B88435] text-[#3F3A35] dark:text-[#DED6CB]">
                 &ldquo;{selectedVerse.text.trim()}&rdquo;
               </blockquote>
 
@@ -1017,9 +1063,21 @@ export default function BibleReaderView({
               )}
 
               {drawerTab !== "original" && loadingInsight && (
-                <div className="py-10 flex flex-col items-center gap-2.5 text-sm text-[#6B635B] dark:text-[#A39A90]">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#9A6B24]" />
-                  <span>Researching historical context & original languages...</span>
+                <div className="rounded-2xl bg-[#FAF4E8]/80 dark:bg-[#251E15]/80 border border-[#E9D7B6] dark:border-[#3C301E] py-8 px-4 flex flex-col items-center text-center gap-3">
+                  <div className="relative flex items-center justify-center">
+                    <span className="absolute w-11 h-11 rounded-full bg-[#DFB164]/20 animate-ping" />
+                    <div className="relative w-10 h-10 rounded-full bg-[#F7EAD0] dark:bg-[#3A2D1B] flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin text-[#9A6B24] dark:text-[#DFB164]" />
+                    </div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8]">
+                      Preparing verse study...
+                    </p>
+                    <p className="text-xs text-[#6B635B] dark:text-[#A39A90]">
+                      Researching historical context, original languages &amp; application
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -1203,8 +1261,9 @@ export default function BibleReaderView({
                   </button>
                 </>
               )}
-            </div>
-          </aside>
+              </div>
+            </aside>
+          </div>
         )}
       </div>
 
