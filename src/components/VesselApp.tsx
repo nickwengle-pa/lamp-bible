@@ -73,7 +73,7 @@ export default function VesselApp() {
     book: string;
     chapter: number;
     verse?: number;
-  }>({ book: "John", chapter: 15 });
+  }>({ book: "John", chapter: 1, verse: 1 });
 
   useEffect(() => {
     const loaded = loadSettings();
@@ -436,17 +436,47 @@ export default function VesselApp() {
       <main className="flex-1 lg:pl-64 pb-20 lg:pb-8">
         <div className="px-4 sm:px-8 py-6 sm:py-8">
           {activeTab === "library" && (
-            <LibraryView
-              settings={settings}
-              notes={notes}
-              loading={loadingNotes}
-              selectedNoteId={selectedNoteId}
-              onSelectNote={setSelectedNoteId}
-              onUpdateNote={handleUpdateNote}
-              onDeleteNote={handleDeleteNote}
-              onOpenScripture={handleOpenScripture}
-              onQuickNavigate={(tab) => setActiveTab(tab)}
-            />
+            <>
+              <LibraryView
+                settings={settings}
+                notes={notes}
+                loading={loadingNotes}
+                selectedNoteId={selectedNoteId}
+                onSelectNote={setSelectedNoteId}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
+                onOpenScripture={handleOpenScripture}
+                onQuickNavigate={(tab) => setActiveTab(tab)}
+              />
+
+              {!selectedNoteId && (
+                <section className="max-w-5xl mx-auto mt-4 pt-8 border-t border-[#E6DCCB] dark:border-[#2A2520] pb-16">
+                  <div className="mb-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
+                      Daily Scripture Reading
+                    </p>
+                    <h2 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight mt-0.5">
+                      Bible Reader
+                    </h2>
+                  </div>
+                  <BibleReaderView
+                    embedded
+                    settings={settings}
+                    initialBook={bibleTarget.book}
+                    initialChapter={bibleTarget.chapter}
+                    highlightVerse={bibleTarget.verse}
+                    notes={notes}
+                    highlights={highlights}
+                    onSaveHighlight={handleSaveHighlight}
+                    onDeleteHighlight={handleDeleteHighlight}
+                    onOpenLibraryNote={handleOpenLibraryNote}
+                    onSaveVerseNote={handleSaveManualNote}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onExpandFullScreen={() => setActiveTab("bible")}
+                  />
+                </section>
+              )}
+            </>
           )}
 
           {activeTab === "record" && (

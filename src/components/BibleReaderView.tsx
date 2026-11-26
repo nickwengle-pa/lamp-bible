@@ -55,6 +55,8 @@ interface BibleReaderViewProps {
   onOpenLibraryNote: (noteId: string) => void;
   onSaveVerseNote: (note: Partial<StudyNote>) => Promise<StudyNote | null>;
   onOpenSettings: () => void;
+  embedded?: boolean;
+  onExpandFullScreen?: () => void;
 }
 
 const HIGHLIGHT_STYLES: Record<
@@ -95,9 +97,11 @@ export default function BibleReaderView({
   onOpenLibraryNote,
   onSaveVerseNote,
   onOpenSettings,
+  embedded = false,
+  onExpandFullScreen,
 }: BibleReaderViewProps) {
   const [book, setBook] = useState(initialBook || "John");
-  const [chapter, setChapter] = useState(initialChapter || 15);
+  const [chapter, setChapter] = useState(initialChapter || 1);
   const [translation, setTranslation] = useState(
     settings.defaultTranslation || "esv"
   );
@@ -190,14 +194,14 @@ export default function BibleReaderView({
     loadChapter(book, chapter, translation);
   }, [book, chapter, translation, loadChapter]);
 
-  // Auto-scroll highlighted verse into view
+  // Auto-scroll highlighted verse into view (only in full-screen reader so embedded home view stays at top)
   useEffect(() => {
-    if (!activeHighlight || !chapterData) return;
+    if (embedded || !activeHighlight || !chapterData) return;
     const el = document.getElementById(`verse-${activeHighlight}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [activeHighlight, chapterData]);
+  }, [embedded, activeHighlight, chapterData]);
 
   const handlePrevChapter = () => {
     if (chapter > 1) {
@@ -331,9 +335,15 @@ export default function BibleReaderView({
   };
 
   return (
-    <div className="max-w-6xl mx-auto pb-16">
+    <div className={embedded ? "max-w-5xl mx-auto" : "max-w-6xl mx-auto pb-16"}>
       {/* Top Reader Toolbar */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] mb-6">
+      <div
+        className={
+          embedded
+            ? "mb-4 pb-3 border-b border-[#E6DCCB] dark:border-[#2A2520]"
+            : "sticky top-0 z-20 -mx-4 px-4 py-3 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] mb-6"
+        }
+      >
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Book / Chapter Selector */}
           <div className="flex items-center gap-1.5">
@@ -386,6 +396,15 @@ export default function BibleReaderView({
                 </option>
               ))}
             </select>
+
+            {embedded && onExpandFullScreen && (
+              <button
+                onClick={onExpandFullScreen}
+                className="px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] hover:border-[#B88435] text-xs font-medium transition"
+              >
+                Full Screen
+              </button>
+            )}
           </div>
         </div>
 

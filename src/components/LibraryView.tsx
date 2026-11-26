@@ -536,7 +536,7 @@ export default function LibraryView({
 
   // Library Index View
   return (
-    <div className="max-w-5xl mx-auto pb-16 space-y-6">
+    <div className="max-w-5xl mx-auto pb-6 space-y-6">
       {/* Header & Quick Capture Strip */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
