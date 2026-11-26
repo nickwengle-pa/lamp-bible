@@ -355,7 +355,7 @@ export default function SermonRecorderView({
     if (isRecording) {
       stopRecording();
       setError(
-        "Stopped recording — click 'Structure with Vessel AI' again to process."
+        "Stopped recording — click 'Structure with Lamp AI' again to process."
       );
       return;
     }
@@ -700,7 +700,7 @@ export default function SermonRecorderView({
             value={rawNotes}
             onChange={(e) => setRawNotes(e.target.value)}
             rows={7}
-            placeholder="Jot down verses mentioned, quotes that stood out, or rough bullet points as you listen. Vessel AI blends your personal notes, live captions, and full sermon audio into a polished study guide..."
+            placeholder="Jot down verses mentioned, quotes that stood out, or rough bullet points as you listen. Lamp AI blends your personal notes, live captions, and full sermon audio into a polished study guide..."
             className="w-full rounded-2xl border border-[#DFD5C5] dark:border-[#36302A] bg-[#FAF7F2] dark:bg-[#141210] p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
           />
         </div>

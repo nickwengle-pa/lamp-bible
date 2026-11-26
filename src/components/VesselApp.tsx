@@ -255,7 +255,7 @@ export default function VesselApp() {
   if (checkingLock) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210]">
-        <img src="/icon.svg" alt="Vessel" className="w-10 h-10 rounded-xl animate-pulse" />
+        <img src="/icon.svg" alt="Lamp" className="w-10 h-10 rounded-xl animate-pulse" />
       </div>
     );
   }
@@ -383,7 +383,7 @@ export default function VesselApp() {
             {lockEnabled && (
               <button
                 onClick={handleLockNow}
-                title="Lock Vessel"
+                title="Lock Lamp"
                 className="p-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-[#6B635B] hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
               >
                 <Lock className="w-3.5 h-3.5" />
@@ -405,7 +405,7 @@ export default function VesselApp() {
             <button
               onClick={handleLockNow}
               className="p-2 rounded-xl text-[#6B635B] dark:text-[#A39A90] hover:bg-[#F2ECE1] dark:hover:bg-[#25201B]"
-              aria-label="Lock Vessel"
+              aria-label="Lock Lamp"
             >
               <Lock className="w-4 h-4" />
             </button>

@@ -17,7 +17,7 @@ const STARTER_NOTES: StudyNote[] = [
     title: "Abiding in the Vine: Fruitfulness Over Striving",
     sourceType: "sermon",
     speaker: "Sample Study Note",
-    churchOrChannel: "Vessel Starter Library",
+    churchOrChannel: "Lamp Starter Library",
     createdAt: "2026-11-24T15:00:00.000Z",
     updatedAt: "2026-11-24T15:00:00.000Z",
     pinned: true,
@@ -70,7 +70,7 @@ const STARTER_NOTES: StudyNote[] = [
       },
       {
         id: "t3",
-        text: "Click any scripture pill above to open it directly in the Vessel Bible Reader with AI verse insights.",
+        text: "Click any scripture pill above to open it directly in the Lamp Bible Reader with AI verse insights.",
         completed: false,
       },
     ],

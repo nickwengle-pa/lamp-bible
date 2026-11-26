@@ -20,7 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = `You are Vessel's Instant Scripture Scanner.
+    const prompt = `You are Lamp's Instant Scripture Scanner.
 Inspect this photograph of a printed Bible page (or printed scripture passage).
 ${body.focusHint ? `User hint: ${body.focusHint}` : ""}
 

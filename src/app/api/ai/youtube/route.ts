@@ -184,7 +184,7 @@ export async function POST(request: Request) {
   "reflectionQuestions": ["2 to 4 deep reflection or discussion questions"]
 }`;
 
-    const baseInstruction = `You are Vessel, a thoughtful Bible study assistant creating structured sermon study notes from a YouTube sermon.
+    const baseInstruction = `You are Lamp, a thoughtful Bible study assistant creating structured sermon study notes from a YouTube sermon.
 Video Title: ${meta.title || "Unknown"}
 Channel: ${meta.author || "Unknown"}
 ${body.focusPrompt ? `User's specific focus request: ${body.focusPrompt}` : ""}

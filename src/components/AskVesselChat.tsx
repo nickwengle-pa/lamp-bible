@@ -64,7 +64,7 @@ export default function AskVesselChat({
         { role: "assistant", content: data.answer },
       ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to ask Vessel.");
+      setError(err instanceof Error ? err.message : "Failed to ask Lamp.");
     } finally {
       setAsking(false);
     }

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     const historyText = (body.history || [])
       .slice(-8)
-      .map((m) => `${m.role === "user" ? "User" : "Vessel"}: ${m.content}`)
+      .map((m) => `${m.role === "user" ? "User" : "Lamp"}: ${m.content}`)
       .join("\n\n");
 
     const prompt = `Context Type: ${body.contextType === "bible" ? "Bible Passage" : "Sermon / Study Note"}
@@ -45,7 +45,7 @@ Answer clearly, warmly, and faithfully rooted in Scripture. Keep your answer foc
       apiKey: apiKey || undefined,
       model,
       systemInstruction:
-        "You are Vessel, a thoughtful, warm, and biblically sound Bible study companion helping believers understand Scripture and apply sermons to everyday life.",
+        "You are Lamp, a thoughtful, warm, and biblically sound Bible study companion helping believers understand Scripture and apply sermons to everyday life.",
       parts: [{ text: prompt }],
       temperature: 0.45,
       timeoutMs: 25000,

@@ -149,7 +149,7 @@ export async function POST(request: Request) {
     const parts: GeminiPart[] = [];
     if (audioPart) parts.push(audioPart);
 
-    const promptText = `You are Vessel, a thoughtful, warm, and biblically faithful AI Bible study & sermon note assistant.
+    const promptText = `You are Lamp, a thoughtful, warm, and biblically faithful AI Bible study & sermon note assistant.
 Analyze the provided sermon inputs (${[
       hasAudio && "sermon audio recording",
       hasLiveTranscript && "live speech transcript",

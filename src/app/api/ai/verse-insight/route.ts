@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = `You are Vessel, a scholarly yet deeply accessible Bible study guide.
+    const prompt = `You are Lamp, a scholarly yet deeply accessible Bible study guide.
 Provide rich contextual insight for this Bible verse:
 
 Reference: ${body.reference} (${body.translation || "WEB"})
