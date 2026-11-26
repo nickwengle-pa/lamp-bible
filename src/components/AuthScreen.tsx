@@ -54,8 +54,19 @@ export default function AuthScreen({
     window.location.href = `/api/auth/google${qs ? `?${qs}` : ""}`;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const submittedEmail = (
+      email ||
+      String(formData.get("username") || formData.get("email") || "")
+    ).trim();
+    const submittedPassword =
+      password || String(formData.get("password") || "");
+    const submittedName = (
+      displayName || String(formData.get("name") || "")
+    ).trim();
+
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -67,8 +78,15 @@ export default function AuthScreen({
         mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
       const payload =
         mode === "signup"
-          ? { displayName, email, password, church, inviteCode, ownerSetupKey }
-          : { email, password };
+          ? {
+              displayName: submittedName,
+              email: submittedEmail,
+              password: submittedPassword,
+              church,
+              inviteCode,
+              ownerSetupKey,
+            }
+          : { email: submittedEmail, password: submittedPassword };
 
       const res = await fetch(endpoint, {
         method: "POST",
@@ -185,16 +203,31 @@ export default function AuthScreen({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form
+          key={mode}
+          id={mode === "signup" ? "lamp-signup-form" : "lamp-login-form"}
+          name={mode === "signup" ? "signup" : "login"}
+          method="post"
+          action={mode === "signup" ? "/api/auth/signup" : "/api/auth/login"}
+          autoComplete="on"
+          onSubmit={handleSubmit}
+          className="space-y-3.5"
+        >
           {mode === "signup" && (
             <div>
-              <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+              <label
+                htmlFor="lamp-auth-name"
+                className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1"
+              >
                 Your Name
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="lamp-auth-name"
+                  name="name"
                   type="text"
+                  autoComplete="name"
                   required
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -206,13 +239,23 @@ export default function AuthScreen({
           )}
 
           <div>
-            <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+            <label
+              htmlFor="lamp-auth-email"
+              className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1"
+            >
               Email Address
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Mail className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
+                id="lamp-auth-email"
+                name={mode === "signup" ? "email" : "username"}
                 type="email"
+                inputMode="email"
+                autoComplete={mode === "signup" ? "email" : "username"}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -223,15 +266,23 @@ export default function AuthScreen({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+            <label
+              htmlFor="lamp-auth-password"
+              className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1"
+            >
               Password {mode === "signup" && "(min. 6 characters)"}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
+                id="lamp-auth-password"
+                name="password"
                 type="password"
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
                 required
-                minLength={6}
+                minLength={mode === "signup" ? 6 : undefined}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -242,13 +293,19 @@ export default function AuthScreen({
 
           {mode === "signup" && (
             <div>
-              <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+              <label
+                htmlFor="lamp-auth-church"
+                className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1"
+              >
                 Church or Small Group (optional)
               </label>
               <div className="relative">
-                <Church className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Church className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="lamp-auth-church"
+                  name="organization"
                   type="text"
+                  autoComplete="organization"
                   value={church}
                   onChange={(e) => setChurch(e.target.value)}
                   placeholder="e.g. Grace Community Church"
@@ -260,13 +317,19 @@ export default function AuthScreen({
 
           {mode === "signup" && ownerSetupRequired && userCount === 0 && (
             <div>
-              <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+              <label
+                htmlFor="lamp-auth-owner-key"
+                className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1"
+              >
                 Owner Setup Key
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="lamp-auth-owner-key"
+                  name="ownerSetupKey"
                   type="password"
+                  autoComplete="off"
                   required
                   value={ownerSetupKey}
                   onChange={(e) => setOwnerSetupKey(e.target.value)}
@@ -279,13 +342,19 @@ export default function AuthScreen({
 
           {mode === "signup" && inviteRequired && (
             <div>
-              <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+              <label
+                htmlFor="lamp-auth-invite"
+                className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1"
+              >
                 Invite Code
               </label>
               <div className="relative">
-                <Ticket className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Ticket className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  id="lamp-auth-invite"
+                  name="inviteCode"
                   type="text"
+                  autoComplete="off"
                   required
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
