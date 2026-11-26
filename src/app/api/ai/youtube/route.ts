@@ -4,6 +4,8 @@ import { createNote } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth";
 import { StudyNote } from "@/lib/types";
 
+const CHUNK_CHAR_LIMIT = 45000;
+
 interface YouTubeMeta {
   videoId: string;
   canonicalUrl: string;
@@ -104,11 +106,34 @@ async function tryFetchYouTubeTranscript(videoId: string): Promise<string | null
       )
       .filter(Boolean);
 
-    const joined = segments.join(" ");
-    return joined.length > 80 ? joined.slice(0, 60000) : null;
+    const joined = segments.join(" ").trim();
+    // Preserve the entire caption transcript without silently truncating the ending
+    return joined.length > 80 ? joined : null;
   } catch {
     return null;
   }
+}
+
+function splitTranscriptIntoChunks(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    let end = Math.min(text.length, cursor + maxChars);
+    if (end < text.length) {
+      const sentenceBreak = text.lastIndexOf(". ", end);
+      const spaceBreak = text.lastIndexOf(" ", end);
+      if (sentenceBreak > cursor + maxChars * 0.65) {
+        end = sentenceBreak + 1;
+      } else if (spaceBreak > cursor + maxChars * 0.65) {
+        end = spaceBreak;
+      }
+    }
+    const slice = text.slice(cursor, end).trim();
+    if (slice) chunks.push(slice);
+    cursor = end;
+  }
+  return chunks;
 }
 
 interface YouTubeAIOutput {
@@ -125,6 +150,14 @@ interface YouTubeAIOutput {
 
 export async function POST(request: Request) {
   try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Please sign in before summarizing YouTube sermons." },
+        { status: 401 }
+      );
+    }
+
     const apiKey = resolveApiKey(request);
     const model = resolveModel(request);
 
@@ -194,19 +227,58 @@ ${promptSchema}`;
     let aiData: YouTubeAIOutput;
 
     if (transcript) {
-      // Fast, reliable path: use extracted or pasted transcript
-      const parts: GeminiPart[] = [
-        {
-          text: `${baseInstruction}\n\nSermon Transcript:\n"""\n${transcript}\n"""`,
-        },
-      ];
-      aiData = await callGemini<YouTubeAIOutput>({
-        apiKey: apiKey || undefined,
-        model,
-        parts,
-        jsonMode: true,
-        temperature: 0.35,
-      });
+      const chunks = splitTranscriptIntoChunks(transcript, CHUNK_CHAR_LIMIT);
+
+      if (chunks.length === 1) {
+        const parts: GeminiPart[] = [
+          {
+            text: `${baseInstruction}\n\nSermon Transcript:\n"""\n${chunks[0]}\n"""`,
+          },
+        ];
+        aiData = await callGemini<YouTubeAIOutput>({
+          apiKey: apiKey || undefined,
+          model,
+          parts,
+          jsonMode: true,
+          temperature: 0.35,
+        });
+      } else {
+        // Multi-section digestion so long 60-120+ min sermons keep their entire conclusion intact
+        const sectionNotes: string[] = [];
+        for (let i = 0; i < chunks.length; i++) {
+          const digest = await callGemini<string>({
+            apiKey: apiKey || undefined,
+            model,
+            parts: [
+              {
+                text: `You are Lamp, summarizing Part ${i + 1} of ${chunks.length} of a long YouTube sermon ("${meta.title || "Sermon"}").
+Extract all major teaching points, illustrations, speaker clues, conclusions/calls to action, and every Scripture reference mentioned in this section. Be thorough and concise.
+
+Section ${i + 1} Transcript:
+"""
+${chunks[i]}
+"""`,
+              },
+            ],
+            temperature: 0.3,
+            timeoutMs: 30000,
+          });
+          sectionNotes.push(`=== Part ${i + 1} of ${chunks.length} ===\n${digest.trim()}`);
+        }
+
+        aiData = await callGemini<YouTubeAIOutput>({
+          apiKey: apiKey || undefined,
+          model,
+          parts: [
+            {
+              text: `${baseInstruction}\n\nComplete Section-by-Section Sermon Digest (covering all ${chunks.length} parts from beginning to conclusion):\n"""\n${sectionNotes.join("\n\n")}\n"""`,
+            },
+          ],
+          jsonMode: true,
+          temperature: 0.35,
+          timeoutMs: 35000,
+        });
+      }
     } else {
       // Native Gemini multimodal YouTube URL path!
       const parts: GeminiPart[] = [
@@ -261,8 +333,7 @@ ${promptSchema}`;
       transcript: transcript || undefined,
     };
 
-    const user = await getSessionUser(request);
-    const saved = await createNote(note, user?.id);
+    const saved = await createNote(note, user.id);
     return NextResponse.json({ note: saved }, { status: 201 });
   } catch (err) {
     const message =

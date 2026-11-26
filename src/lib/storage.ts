@@ -5,18 +5,63 @@ interface VesselKV {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
   delete?(key: string): Promise<void>;
+  list?(options?: {
+    prefix?: string;
+    cursor?: string;
+  }): Promise<{
+    keys: { name: string }[];
+    list_complete?: boolean;
+    cursor?: string;
+  }>;
 }
 
 const LEGACY_NOTES_KV_KEY = "vessel_library_notes_v1";
 const LEGACY_HIGHLIGHTS_KV_KEY = "vessel_bible_highlights_v1";
-const PIN_KV_KEY = "vessel_privacy_pin_hash_v1";
 
-function notesKey(userId?: string): string {
+function legacyNotesKey(userId?: string): string {
   return userId ? `lamp_user_${userId}_notes_v1` : LEGACY_NOTES_KV_KEY;
 }
 
-function highlightsKey(userId?: string): string {
+function legacyHighlightsKey(userId?: string): string {
   return userId ? `lamp_user_${userId}_highlights_v1` : LEGACY_HIGHLIGHTS_KV_KEY;
+}
+
+function noteRecordPrefix(userId?: string): string {
+  return userId ? `lamp_u_${userId}_note_` : "lamp_legacy_note_";
+}
+
+function noteRecordKey(id: string, userId?: string): string {
+  return `${noteRecordPrefix(userId)}${id}`;
+}
+
+function notesMigratedKey(userId?: string): string {
+  return userId ? `lamp_u_${userId}_notes_v2` : "lamp_legacy_notes_v2";
+}
+
+function highlightRecordPrefix(userId?: string): string {
+  return userId ? `lamp_u_${userId}_hl_` : "lamp_legacy_hl_";
+}
+
+function highlightRecordKey(hlKey: string, userId?: string): string {
+  return `${highlightRecordPrefix(userId)}${encodeURIComponent(hlKey)}`;
+}
+
+function highlightsMigratedKey(userId?: string): string {
+  return userId ? `lamp_u_${userId}_hl_v2` : "lamp_legacy_hl_v2";
+}
+
+// Per-scope write queue so concurrent updates in the same runtime never clobber one another
+const writeQueues = new Map<string, Promise<unknown>>();
+
+function withSerializedWrite<T>(queueKey: string, fn: () => Promise<T>): Promise<T> {
+  const prev = writeQueues.get(queueKey) || Promise.resolve();
+  const run = prev.catch(() => {}).then(fn);
+  const tail = run.then(
+    () => undefined,
+    () => undefined
+  );
+  writeQueues.set(queueKey, tail);
+  return run;
 }
 
 const STARTER_NOTES: StudyNote[] = [
@@ -100,6 +145,20 @@ function getKv(): VesselKV | null {
   return cfEnv?.VESSEL_NOTES ?? null;
 }
 
+async function listAllKeys(kv: VesselKV, prefix: string): Promise<string[]> {
+  if (!kv.list) return [];
+  const names: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await kv.list({ prefix, cursor });
+    for (const k of res.keys || []) {
+      names.push(k.name);
+    }
+    cursor = res.list_complete ? undefined : res.cursor;
+  } while (cursor);
+  return names;
+}
+
 /**
  * Copies any existing single-user notes & highlights into the first admin account
  * so zero existing data is lost when multi-user profiles activate.
@@ -108,27 +167,107 @@ export async function migrateLegacyDataToUser(userId: string): Promise<void> {
   const kv = getKv();
   if (!kv) return;
 
-  const existingUserNotes = await kv.get(notesKey(userId));
-  if (!existingUserNotes) {
-    const legacyNotes = await kv.get(LEGACY_NOTES_KV_KEY);
-    if (legacyNotes) {
-      await kv.put(notesKey(userId), legacyNotes);
+  await withSerializedWrite(`notes:${userId}`, async () => {
+    const existingUserNotes = await kv.get(legacyNotesKey(userId));
+    const alreadyMigrated = await kv.get(notesMigratedKey(userId));
+    if (!existingUserNotes && !alreadyMigrated) {
+      const legacyNotes = await kv.get(LEGACY_NOTES_KV_KEY);
+      if (legacyNotes) {
+        if (kv.list) {
+          try {
+            const parsed = JSON.parse(legacyNotes) as StudyNote[];
+            if (Array.isArray(parsed)) {
+              await Promise.all(
+                parsed.map((n) =>
+                  kv.put(noteRecordKey(n.id, userId), JSON.stringify(n))
+                )
+              );
+              await kv.put(notesMigratedKey(userId), "1");
+            }
+          } catch {
+            await kv.put(legacyNotesKey(userId), legacyNotes);
+          }
+        } else {
+          await kv.put(legacyNotesKey(userId), legacyNotes);
+        }
+      }
     }
-  }
+  });
 
-  const existingUserHl = await kv.get(highlightsKey(userId));
-  if (!existingUserHl) {
-    const legacyHl = await kv.get(LEGACY_HIGHLIGHTS_KV_KEY);
-    if (legacyHl) {
-      await kv.put(highlightsKey(userId), legacyHl);
+  await withSerializedWrite(`hl:${userId}`, async () => {
+    const existingUserHl = await kv.get(legacyHighlightsKey(userId));
+    const alreadyMigrated = await kv.get(highlightsMigratedKey(userId));
+    if (!existingUserHl && !alreadyMigrated) {
+      const legacyHl = await kv.get(LEGACY_HIGHLIGHTS_KV_KEY);
+      if (legacyHl) {
+        if (kv.list) {
+          try {
+            const parsed = JSON.parse(legacyHl) as Record<string, VerseHighlight>;
+            await Promise.all(
+              Object.values(parsed).map((h) =>
+                kv.put(highlightRecordKey(h.key, userId), JSON.stringify(h))
+              )
+            );
+            await kv.put(highlightsMigratedKey(userId), "1");
+          } catch {
+            await kv.put(legacyHighlightsKey(userId), legacyHl);
+          }
+        } else {
+          await kv.put(legacyHighlightsKey(userId), legacyHl);
+        }
+      }
     }
-  }
+  });
+}
+
+async function ensureNotesMigrated(kv: VesselKV, userId?: string): Promise<void> {
+  if (!kv.list) return;
+  const marker = await kv.get(notesMigratedKey(userId));
+  if (marker === "1") return;
+
+  await withSerializedWrite(`notes-migrate:${userId || "legacy"}`, async () => {
+    const recheck = await kv.get(notesMigratedKey(userId));
+    if (recheck === "1") return;
+
+    const legacyRaw = await kv.get(legacyNotesKey(userId));
+    let seed: StudyNote[] = [...STARTER_NOTES];
+    if (legacyRaw) {
+      try {
+        const parsed = JSON.parse(legacyRaw) as StudyNote[];
+        if (Array.isArray(parsed)) seed = parsed;
+      } catch {
+        // fall back to starter notes
+      }
+    }
+
+    await Promise.all(
+      seed.map((n) => kv.put(noteRecordKey(n.id, userId), JSON.stringify(n)))
+    );
+    await kv.put(notesMigratedKey(userId), "1");
+  });
 }
 
 async function readNotes(userId?: string): Promise<StudyNote[]> {
-  const key = notesKey(userId);
   const kv = getKv();
   if (kv) {
+    if (kv.list) {
+      await ensureNotesMigrated(kv, userId);
+      const keys = await listAllKeys(kv, noteRecordPrefix(userId));
+      if (keys.length === 0) return [];
+      const values = await Promise.all(keys.map((k) => kv.get(k)));
+      const notes: StudyNote[] = [];
+      for (const raw of values) {
+        if (!raw) continue;
+        try {
+          notes.push(JSON.parse(raw) as StudyNote);
+        } catch {
+          // skip malformed
+        }
+      }
+      return notes;
+    }
+
+    const key = legacyNotesKey(userId);
     const raw = await kv.get(key);
     if (!raw) {
       await kv.put(key, JSON.stringify(STARTER_NOTES));
@@ -141,20 +280,11 @@ async function readNotes(userId?: string): Promise<StudyNote[]> {
     }
   }
 
+  const key = legacyNotesKey(userId);
   if (!memoryNotesByKey.has(key)) {
     memoryNotesByKey.set(key, [...STARTER_NOTES]);
   }
   return [...(memoryNotesByKey.get(key) || STARTER_NOTES)];
-}
-
-async function writeNotes(notes: StudyNote[], userId?: string): Promise<void> {
-  const key = notesKey(userId);
-  const kv = getKv();
-  if (kv) {
-    await kv.put(key, JSON.stringify(notes));
-    return;
-  }
-  memoryNotesByKey.set(key, [...notes]);
 }
 
 export async function getAllNotes(userId?: string): Promise<StudyNote[]> {
@@ -170,6 +300,17 @@ export async function getNoteById(
   id: string,
   userId?: string
 ): Promise<StudyNote | undefined> {
+  const kv = getKv();
+  if (kv && kv.list) {
+    await ensureNotesMigrated(kv, userId);
+    const raw = await kv.get(noteRecordKey(id, userId));
+    if (!raw) return undefined;
+    try {
+      return JSON.parse(raw) as StudyNote;
+    } catch {
+      return undefined;
+    }
+  }
   const notes = await readNotes(userId);
   return notes.find((n) => n.id === id);
 }
@@ -178,10 +319,26 @@ export async function createNote(
   note: StudyNote,
   userId?: string
 ): Promise<StudyNote> {
-  const notes = await readNotes(userId);
-  notes.unshift(note);
-  await writeNotes(notes, userId);
-  return note;
+  const kv = getKv();
+  if (kv && kv.list) {
+    await ensureNotesMigrated(kv, userId);
+    // Independent key per note: concurrent creations never overwrite one another
+    await kv.put(noteRecordKey(note.id, userId), JSON.stringify(note));
+    return note;
+  }
+
+  return withSerializedWrite(`notes:${userId || "legacy"}`, async () => {
+    const notes = await readNotes(userId);
+    const filtered = notes.filter((n) => n.id !== note.id);
+    filtered.unshift(note);
+    const key = legacyNotesKey(userId);
+    if (kv) {
+      await kv.put(key, JSON.stringify(filtered));
+    } else {
+      memoryNotesByKey.set(key, filtered);
+    }
+    return note;
+  });
 }
 
 export async function updateNote(
@@ -189,37 +346,129 @@ export async function updateNote(
   updates: Partial<StudyNote>,
   userId?: string
 ): Promise<StudyNote | null> {
-  const notes = await readNotes(userId);
-  const idx = notes.findIndex((n) => n.id === id);
-  if (idx === -1) return null;
-  notes[idx] = {
-    ...notes[idx],
-    ...updates,
-    id: notes[idx].id,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeNotes(notes, userId);
-  return notes[idx];
+  const kv = getKv();
+  if (kv && kv.list) {
+    return withSerializedWrite(`note:${userId || "legacy"}:${id}`, async () => {
+      await ensureNotesMigrated(kv, userId);
+      const raw = await kv.get(noteRecordKey(id, userId));
+      if (!raw) return null;
+      const existing = JSON.parse(raw) as StudyNote;
+      const updated: StudyNote = {
+        ...existing,
+        ...updates,
+        id: existing.id,
+        updatedAt: new Date().toISOString(),
+      };
+      await kv.put(noteRecordKey(id, userId), JSON.stringify(updated));
+      return updated;
+    });
+  }
+
+  return withSerializedWrite(`notes:${userId || "legacy"}`, async () => {
+    const notes = await readNotes(userId);
+    const idx = notes.findIndex((n) => n.id === id);
+    if (idx === -1) return null;
+    notes[idx] = {
+      ...notes[idx],
+      ...updates,
+      id: notes[idx].id,
+      updatedAt: new Date().toISOString(),
+    };
+    const key = legacyNotesKey(userId);
+    if (kv) {
+      await kv.put(key, JSON.stringify(notes));
+    } else {
+      memoryNotesByKey.set(key, notes);
+    }
+    return notes[idx];
+  });
 }
 
 export async function deleteNote(
   id: string,
   userId?: string
 ): Promise<boolean> {
-  const notes = await readNotes(userId);
-  const filtered = notes.filter((n) => n.id !== id);
-  if (filtered.length === notes.length) return false;
-  await writeNotes(filtered, userId);
-  return true;
+  const kv = getKv();
+  if (kv && kv.list) {
+    return withSerializedWrite(`note:${userId || "legacy"}:${id}`, async () => {
+      await ensureNotesMigrated(kv, userId);
+      const k = noteRecordKey(id, userId);
+      const existing = await kv.get(k);
+      if (!existing) return false;
+      if (kv.delete) {
+        await kv.delete(k);
+      } else {
+        await kv.put(k, "");
+      }
+      return true;
+    });
+  }
+
+  return withSerializedWrite(`notes:${userId || "legacy"}`, async () => {
+    const notes = await readNotes(userId);
+    const filtered = notes.filter((n) => n.id !== id);
+    if (filtered.length === notes.length) return false;
+    const key = legacyNotesKey(userId);
+    if (kv) {
+      await kv.put(key, JSON.stringify(filtered));
+    } else {
+      memoryNotesByKey.set(key, filtered);
+    }
+    return true;
+  });
 }
 
-// --- Bible Highlights & Margin Notes (per user) ---
+// --- Bible Highlights & Margin Notes (per user, independent record keys) ---
+async function ensureHighlightsMigrated(kv: VesselKV, userId?: string): Promise<void> {
+  if (!kv.list) return;
+  const marker = await kv.get(highlightsMigratedKey(userId));
+  if (marker === "1") return;
+
+  await withSerializedWrite(`hl-migrate:${userId || "legacy"}`, async () => {
+    const recheck = await kv.get(highlightsMigratedKey(userId));
+    if (recheck === "1") return;
+
+    const legacyRaw = await kv.get(legacyHighlightsKey(userId));
+    if (legacyRaw) {
+      try {
+        const parsed = JSON.parse(legacyRaw) as Record<string, VerseHighlight>;
+        await Promise.all(
+          Object.values(parsed).map((h) =>
+            kv.put(highlightRecordKey(h.key, userId), JSON.stringify(h))
+          )
+        );
+      } catch {
+        // ignore corrupt legacy blob
+      }
+    }
+    await kv.put(highlightsMigratedKey(userId), "1");
+  });
+}
+
 export async function getAllHighlights(
   userId?: string
 ): Promise<Record<string, VerseHighlight>> {
-  const key = highlightsKey(userId);
   const kv = getKv();
   if (kv) {
+    if (kv.list) {
+      await ensureHighlightsMigrated(kv, userId);
+      const keys = await listAllKeys(kv, highlightRecordPrefix(userId));
+      const out: Record<string, VerseHighlight> = {};
+      if (keys.length === 0) return out;
+      const values = await Promise.all(keys.map((k) => kv.get(k)));
+      for (const raw of values) {
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw) as VerseHighlight;
+          if (parsed?.key) out[parsed.key] = parsed;
+        } catch {
+          // skip malformed
+        }
+      }
+      return out;
+    }
+
+    const key = legacyHighlightsKey(userId);
     const raw = await kv.get(key);
     if (!raw) return {};
     try {
@@ -228,66 +477,58 @@ export async function getAllHighlights(
       return {};
     }
   }
-  return { ...(memoryHighlightsByKey.get(key) || {}) };
+  return { ...(memoryHighlightsByKey.get(legacyHighlightsKey(userId)) || {}) };
 }
 
 export async function upsertHighlight(
   highlight: VerseHighlight,
   userId?: string
 ): Promise<Record<string, VerseHighlight>> {
-  const key = highlightsKey(userId);
-  const all = await getAllHighlights(userId);
-  all[highlight.key] = highlight;
   const kv = getKv();
-  if (kv) {
-    await kv.put(key, JSON.stringify(all));
-  } else {
-    memoryHighlightsByKey.set(key, all);
+  if (kv && kv.list) {
+    await ensureHighlightsMigrated(kv, userId);
+    await kv.put(highlightRecordKey(highlight.key, userId), JSON.stringify(highlight));
+    return getAllHighlights(userId);
   }
-  return all;
+
+  return withSerializedWrite(`hl:${userId || "legacy"}`, async () => {
+    const key = legacyHighlightsKey(userId);
+    const all = await getAllHighlights(userId);
+    all[highlight.key] = highlight;
+    if (kv) {
+      await kv.put(key, JSON.stringify(all));
+    } else {
+      memoryHighlightsByKey.set(key, all);
+    }
+    return all;
+  });
 }
 
 export async function deleteHighlight(
   highlightKey: string,
   userId?: string
 ): Promise<Record<string, VerseHighlight>> {
-  const key = highlightsKey(userId);
-  const all = await getAllHighlights(userId);
-  delete all[highlightKey];
   const kv = getKv();
-  if (kv) {
-    await kv.put(key, JSON.stringify(all));
-  } else {
-    memoryHighlightsByKey.set(key, all);
-  }
-  return all;
-}
-
-// --- Optional Legacy Privacy PIN Lock ---
-let memoryPinHash: string | null = null;
-
-export async function getPinHash(): Promise<string | null> {
-  const kv = getKv();
-  if (kv) {
-    const raw = await kv.get(PIN_KV_KEY);
-    return raw || null;
-  }
-  return memoryPinHash;
-}
-
-export async function setPinHash(hash: string | null): Promise<void> {
-  const kv = getKv();
-  if (kv) {
-    if (!hash) {
-      if (kv.delete) {
-        await kv.delete(PIN_KV_KEY);
-      } else {
-        await kv.put(PIN_KV_KEY, "");
-      }
+  if (kv && kv.list) {
+    await ensureHighlightsMigrated(kv, userId);
+    const k = highlightRecordKey(highlightKey, userId);
+    if (kv.delete) {
+      await kv.delete(k);
     } else {
-      await kv.put(PIN_KV_KEY, hash);
+      await kv.put(k, "");
     }
-    return;
+    return getAllHighlights(userId);
   }
-  memoryPinHash = hash;
+
+  return withSerializedWrite(`hl:${userId || "legacy"}`, async () => {
+    const key = legacyHighlightsKey(userId);
+    const all = await getAllHighlights(userId);
+    delete all[highlightKey];
+    if (kv) {
+      await kv.put(key, JSON.stringify(all));
+    } else {
+      memoryHighlightsByKey.set(key, all);
+    }
+    return all;
+  });
 }

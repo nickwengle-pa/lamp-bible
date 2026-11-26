@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getAuthSettings,
+  getConfiguredOwnerSetupKey,
   getSessionUser,
   getUserCount,
   listAllProfiles,
@@ -20,6 +21,7 @@ export async function GET(request: Request) {
       user,
       userCount,
       inviteRequired: userCount > 0 && Boolean(authSettings.inviteCode),
+      ownerSetupRequired: userCount === 0 && Boolean(getConfiguredOwnerSetupKey()),
     };
 
     if (user?.role === "admin") {

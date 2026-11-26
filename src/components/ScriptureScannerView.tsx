@@ -129,8 +129,8 @@ export default function ScriptureScannerView({
           focusHint: focusHint.trim() || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = (await res.json()) as { result?: ScanResult; error?: string };
+      if (!res.ok || !data.result) {
         throw new Error(data.error || "Failed to recognize scripture page.");
       }
       setResult(data.result);

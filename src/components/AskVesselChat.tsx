@@ -55,8 +55,8 @@ export default function AskVesselChat({
           question: q,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = (await res.json()) as { answer?: string; error?: string };
+      if (!res.ok || !data.answer) {
         throw new Error(data.error || "Could not get an answer right now.");
       }
       setMessages([

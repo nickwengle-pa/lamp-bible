@@ -8,12 +8,14 @@ import { LampTitleLockup } from "./LampBrand";
 interface AuthScreenProps {
   userCount: number;
   inviteRequired: boolean;
+  ownerSetupRequired?: boolean;
   onAuthenticated: (user: UserProfile) => void;
 }
 
 export default function AuthScreen({
   userCount,
   inviteRequired,
+  ownerSetupRequired = false,
   onAuthenticated,
 }: AuthScreenProps) {
   const [mode, setMode] = useState<"login" | "signup">(
@@ -24,6 +26,7 @@ export default function AuthScreen({
   const [password, setPassword] = useState("");
   const [church, setChurch] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [ownerSetupKey, setOwnerSetupKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +43,7 @@ export default function AuthScreen({
         mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
       const payload =
         mode === "signup"
-          ? { displayName, email, password, church, inviteCode }
+          ? { displayName, email, password, church, inviteCode, ownerSetupKey }
           : { email, password };
 
       const res = await fetch(endpoint, {
@@ -189,6 +192,25 @@ export default function AuthScreen({
                   value={church}
                   onChange={(e) => setChurch(e.target.value)}
                   placeholder="e.g. Grace Community Church"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                />
+              </div>
+            </div>
+          )}
+
+          {mode === "signup" && ownerSetupRequired && userCount === 0 && (
+            <div>
+              <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1">
+                Owner Setup Key
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="password"
+                  required
+                  value={ownerSetupKey}
+                  onChange={(e) => setOwnerSetupKey(e.target.value)}
+                  placeholder="Enter one-time OWNER_SETUP_KEY"
                   className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
                 />
               </div>

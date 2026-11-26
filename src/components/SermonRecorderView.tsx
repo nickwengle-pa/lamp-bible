@@ -25,6 +25,12 @@ interface SermonRecorderViewProps {
   existingSeries?: string[];
   onNoteCreated: (note: StudyNote) => void;
   onOpenSettings: () => void;
+  onRecordingStatusChange?: (status: {
+    isRecording: boolean;
+    isPaused: boolean;
+    seconds: number;
+    hasUnsaved: boolean;
+  }) => void;
 }
 
 type SpeechRecInstance = {
@@ -43,6 +49,7 @@ export default function SermonRecorderView({
   existingSeries = [],
   onNoteCreated,
   onOpenSettings,
+  onRecordingStatusChange,
 }: SermonRecorderViewProps) {
   const [title, setTitle] = useState("");
   const [speaker, setSpeaker] = useState("");
@@ -83,6 +90,30 @@ export default function SermonRecorderView({
   const speechRef = useRef<SpeechRecInstance | null>(null);
   const isRecordingRef = useRef(false);
   const isPausedRef = useRef(false);
+  const audioUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    audioUrlRef.current = audioUrl;
+  }, [audioUrl]);
+
+  useEffect(() => {
+    onRecordingStatusChange?.({
+      isRecording,
+      isPaused,
+      seconds,
+      hasUnsaved: Boolean(
+        isRecording || audioBlob || rawNotes.trim() || liveTranscript.trim()
+      ),
+    });
+  }, [
+    isRecording,
+    isPaused,
+    seconds,
+    audioBlob,
+    rawNotes,
+    liveTranscript,
+    onRecordingStatusChange,
+  ]);
 
   useEffect(() => {
     const win = window as any;
@@ -91,7 +122,7 @@ export default function SermonRecorderView({
     );
     return () => {
       cleanupAudioResources();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     };
   }, []);
 
@@ -277,7 +308,10 @@ export default function SermonRecorderView({
         setSeconds((s) => s + 1);
       }, 1000);
     } catch {
-      releaseWakeLock();
+      cleanupAudioResources();
+      setIsRecording(false);
+      setIsPaused(false);
+      setLevels(new Array(24).fill(12));
       setError(
         "Microphone permission was denied or unavailable. You can still upload an audio file or type your live sermon notes below."
       );
@@ -402,10 +436,20 @@ export default function SermonRecorderView({
         body: form,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
+      const data = (await res.json()) as { note?: StudyNote; error?: string };
+      if (!res.ok || !data.note) {
         throw new Error(data.error || "Failed to structure sermon notes.");
       }
+
+      // Reset draft cleanly now that the sermon has been saved to the Library
+      clearAudio();
+      setTitle("");
+      setSpeaker("");
+      setChurch("");
+      setSeries("");
+      setRawNotes("");
+      setLiveTranscript("");
+      setInterimCaption("");
 
       onNoteCreated(data.note);
     } catch (err) {

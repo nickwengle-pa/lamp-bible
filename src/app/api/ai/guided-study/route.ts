@@ -17,6 +17,14 @@ interface GuidedAIOutput {
 
 export async function POST(request: Request) {
   try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Please sign in before generating a guided study." },
+        { status: 401 }
+      );
+    }
+
     const apiKey = resolveApiKey(request);
     const model = resolveModel(request);
 
@@ -119,8 +127,7 @@ Return ONLY valid JSON matching this exact schema:
     };
 
     if (body.saveToLibrary !== false) {
-      const user = await getSessionUser(request);
-      const saved = await createNote(note, user?.id);
+      const saved = await createNote(note, user.id);
       return NextResponse.json({ note: saved }, { status: 201 });
     }
 

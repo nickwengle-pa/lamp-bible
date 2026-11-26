@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   BookOpen,
   ChevronLeft,
@@ -67,6 +67,7 @@ interface BibleReaderViewProps {
   settings: AppSettings;
   initialBook: string;
   initialChapter: number;
+  initialTranslation?: string;
   highlightVerse?: number;
   notes: StudyNote[];
   highlights: Record<string, VerseHighlight>;
@@ -82,7 +83,12 @@ interface BibleReaderViewProps {
   onSaveVerseNote: (note: Partial<StudyNote>) => Promise<StudyNote | null>;
   onOpenSettings: () => void;
   embedded?: boolean;
-  onExpandFullScreen?: () => void;
+  onExpandFullScreen?: (location: {
+    book: string;
+    chapter: number;
+    verse?: number;
+    translation: string;
+  }) => void;
 }
 
 const HIGHLIGHT_STYLES: Record<
@@ -115,6 +121,7 @@ export default function BibleReaderView({
   settings,
   initialBook,
   initialChapter,
+  initialTranslation,
   highlightVerse,
   notes,
   highlights,
@@ -129,7 +136,7 @@ export default function BibleReaderView({
   const [book, setBook] = useState(initialBook || "John");
   const [chapter, setChapter] = useState(initialChapter || 1);
   const [translation, setTranslation] = useState(
-    settings.defaultTranslation || "esv"
+    initialTranslation || settings.defaultTranslation || "bsb"
   );
   const [activeHighlight, setActiveHighlight] = useState<number | undefined>(
     highlightVerse
@@ -148,6 +155,9 @@ export default function BibleReaderView({
 
   // Verse Insight Panel & Margin Note Draft
   const [selectedVerse, setSelectedVerse] = useState<BibleVerse | null>(null);
+  const [selectedVerseTranslation, setSelectedVerseTranslation] = useState<string>(
+    initialTranslation || settings.defaultTranslation || "bsb"
+  );
   const [drawerTab, setDrawerTab] = useState<
     "explain" | "original" | "deep" | "related"
   >("explain");
@@ -170,6 +180,13 @@ export default function BibleReaderView({
   const [wordLexicon, setWordLexicon] = useState<LexiconEntry | null>(null);
   const [loadingLexicon, setLoadingLexicon] = useState(false);
   const [speakingWord, setSpeakingWord] = useState(false);
+
+  // Monotonic request IDs + AbortControllers prevent stale async responses from overwriting newer selections
+  const chapterReqIdRef = useRef(0);
+  const chapterAbortRef = useRef<AbortController | null>(null);
+  const verseReqIdRef = useRef(0);
+  const verseAbortRef = useRef<AbortController | null>(null);
+  const lexiconReqIdRef = useRef(0);
 
   // Cross-link saved sermons/studies referencing this chapter & map to specific verses!
   const { relatedNotes, verseStudyMap } = React.useMemo(() => {
@@ -200,24 +217,49 @@ export default function BibleReaderView({
     );
   }, [highlights, book, chapter]);
 
-  // Sync external navigation (from Library or Scanner!)
+  // Sync external navigation (from Library, Scanner, or Full Screen expansion)
   useEffect(() => {
     setBook(initialBook);
     setChapter(initialChapter);
     setActiveHighlight(highlightVerse);
-  }, [initialBook, initialChapter, highlightVerse]);
+    if (initialTranslation) {
+      setTranslation(initialTranslation);
+    }
+  }, [initialBook, initialChapter, initialTranslation, highlightVerse]);
 
   useEffect(() => {
-    if (settings.defaultTranslation) {
+    if (!initialTranslation && settings.defaultTranslation) {
       setTranslation(settings.defaultTranslation);
     }
-  }, [settings.defaultTranslation]);
+  }, [settings.defaultTranslation, initialTranslation]);
+
+  const closeVerseDrawer = useCallback(() => {
+    verseReqIdRef.current += 1;
+    verseAbortRef.current?.abort();
+    verseAbortRef.current = null;
+    setSelectedVerse(null);
+    setShareOpen(false);
+    setLoadingInsight(false);
+    setLoadingInterlinear(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      chapterAbortRef.current?.abort();
+      verseAbortRef.current?.abort();
+    };
+  }, []);
 
   const currentBookObj =
     BIBLE_BOOKS.find((b) => b.name === book) || BIBLE_BOOKS[42]; // John
 
   const loadChapter = useCallback(
     async (b: string, ch: number, trans: string) => {
+      const reqId = ++chapterReqIdRef.current;
+      chapterAbortRef.current?.abort();
+      const controller = new AbortController();
+      chapterAbortRef.current = controller;
+
       setLoadingChapter(true);
       setChapterError(null);
       try {
@@ -227,27 +269,34 @@ export default function BibleReaderView({
           )}&translation=${encodeURIComponent(trans)}`,
           {
             headers: bibleHeaders(settings),
+            signal: controller.signal,
           }
         );
-        const data = await res.json();
+        const data = (await res.json()) as BibleChapterResponse & { error?: string };
+        if (reqId !== chapterReqIdRef.current) return;
         if (!res.ok) {
           throw new Error(data.error || "Could not load Bible chapter.");
         }
         setChapterData(data);
       } catch (err) {
+        if (reqId !== chapterReqIdRef.current) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setChapterError(
           err instanceof Error ? err.message : "Failed to fetch scripture."
         );
       } finally {
-        setLoadingChapter(false);
+        if (reqId === chapterReqIdRef.current) {
+          setLoadingChapter(false);
+        }
       }
     },
     [settings.esvApiKey]
   );
 
   useEffect(() => {
+    closeVerseDrawer();
     loadChapter(book, chapter, translation);
-  }, [book, chapter, translation, loadChapter]);
+  }, [book, chapter, translation, loadChapter, closeVerseDrawer]);
 
   // Lock background scroll on mobile & allow Escape key when the Verse Study modal is open
   useEffect(() => {
@@ -336,25 +385,44 @@ export default function BibleReaderView({
   };
 
   const handleSelectInterlinearWord = async (word: InterlinearWord) => {
+    const reqId = ++lexiconReqIdRef.current;
     setSelectedWord(word);
     setWordLexicon(null);
-    if (!word.strongs) return;
+    if (!word.strongs) {
+      setLoadingLexicon(false);
+      return;
+    }
     setLoadingLexicon(true);
     try {
       const res = await fetch(
         `/api/lexicon?q=${encodeURIComponent(word.strongs)}`
       );
+      if (reqId !== lexiconReqIdRef.current) return;
       if (res.ok) {
         const data = (await res.json()) as { entries?: LexiconEntry[] };
-        setWordLexicon(data.entries?.[0] || null);
+        if (reqId === lexiconReqIdRef.current) {
+          setWordLexicon(data.entries?.[0] || null);
+        }
       }
     } finally {
-      setLoadingLexicon(false);
+      if (reqId === lexiconReqIdRef.current) {
+        setLoadingLexicon(false);
+      }
     }
   };
 
   const handleVerseClick = async (v: BibleVerse) => {
+    const reqId = ++verseReqIdRef.current;
+    verseAbortRef.current?.abort();
+    const controller = new AbortController();
+    verseAbortRef.current = controller;
+
+    const loadedTranslation = (
+      chapterData?.translation_id || translation
+    ).toLowerCase();
+
     setSelectedVerse(v);
+    setSelectedVerseTranslation(loadedTranslation);
     const vKey = `${v.book_name}:${v.chapter}:${v.verse}`;
     setMarginNoteDraft(highlights[vKey]?.note || "");
     setInsight(null);
@@ -373,38 +441,54 @@ export default function BibleReaderView({
       .join(" ");
 
     // Fetch real word-by-word Hebrew/Greek interlinear in parallel with AI insight!
-    fetch(`/api/interlinear?passage=${encodeURIComponent(ref)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: any) => {
+    fetch(`/api/interlinear?passage=${encodeURIComponent(ref)}`, {
+      signal: controller.signal,
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<{ words?: InterlinearWord[] }>) : null))
+      .then((data) => {
+        if (reqId !== verseReqIdRef.current) return;
         if (Array.isArray(data?.words)) {
           setInterlinearWords(data.words);
         }
       })
       .catch(() => {})
-      .finally(() => setLoadingInterlinear(false));
+      .finally(() => {
+        if (reqId === verseReqIdRef.current) {
+          setLoadingInterlinear(false);
+        }
+      });
 
     try {
       const res = await fetch("/api/ai/verse-insight", {
         method: "POST",
         headers: aiHeaders(settings),
+        signal: controller.signal,
         body: JSON.stringify({
           reference: ref,
           verseText: v.text.trim(),
-          translation: translation.toUpperCase(),
+          translation: loadedTranslation.toUpperCase(),
           surroundingContext: surrounding,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = (await res.json()) as {
+        insight?: VerseInsight;
+        error?: string;
+      };
+      if (reqId !== verseReqIdRef.current) return;
+      if (!res.ok || !data.insight) {
         throw new Error(data.error || "Could not load verse insight.");
       }
       setInsight(data.insight);
     } catch (err) {
+      if (reqId !== verseReqIdRef.current) return;
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setInsightError(
         err instanceof Error ? err.message : "Failed to load insight."
       );
     } finally {
-      setLoadingInsight(false);
+      if (reqId === verseReqIdRef.current) {
+        setLoadingInsight(false);
+      }
     }
   };
 
@@ -523,7 +607,14 @@ export default function BibleReaderView({
 
             {embedded && onExpandFullScreen && (
               <button
-                onClick={onExpandFullScreen}
+                onClick={() =>
+                  onExpandFullScreen({
+                    book,
+                    chapter,
+                    verse: selectedVerse?.verse ?? activeHighlight,
+                    translation,
+                  })
+                }
                 className="px-2.5 sm:px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] hover:border-[#B88435] text-xs font-medium whitespace-nowrap transition"
               >
                 Full Screen
@@ -1242,7 +1333,7 @@ export default function BibleReaderView({
                         compact
                         contextType="bible"
                         contextTitle={`${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`}
-                        contextBody={`Verse (${translation.toUpperCase()}): "${selectedVerse.text.trim()}"\nHistorical Context: ${insight.historicalContext}\nDeeper Meaning: ${insight.deeperMeaning}`}
+                        contextBody={`Verse (${selectedVerseTranslation.toUpperCase()}): "${selectedVerse.text.trim()}"\nHistorical Context: ${insight.historicalContext}\nDeeper Meaning: ${insight.deeperMeaning}`}
                         suggestions={[
                           "How does this connect to Jesus?",
                           "Give a real-life example of living this out",
@@ -1283,7 +1374,7 @@ export default function BibleReaderView({
           onClose={() => setShareOpen(false)}
           reference={`${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`}
           verseText={selectedVerse.text}
-          translation={translation}
+          translation={selectedVerseTranslation}
         />
       )}
     </div>

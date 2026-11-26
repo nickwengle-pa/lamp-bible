@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
+import { getSessionUser } from "@/lib/auth";
 import { VerseInsight } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Please sign in to load AI verse insights." },
+        { status: 401 }
+      );
+    }
+
     const apiKey = resolveApiKey(request);
     const model = resolveModel(request);
 

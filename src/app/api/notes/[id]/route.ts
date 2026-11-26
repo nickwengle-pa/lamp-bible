@@ -9,8 +9,11 @@ export async function GET(
 ) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const { id } = await context.params;
-    const note = await getNoteById(id, user?.id);
+    const note = await getNoteById(id, user.id);
     if (!note) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
@@ -27,9 +30,12 @@ export async function PATCH(
 ) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const { id } = await context.params;
     const updates = (await request.json()) as Partial<StudyNote>;
-    const updated = await updateNote(id, updates, user?.id);
+    const updated = await updateNote(id, updates, user.id);
     if (!updated) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
@@ -46,8 +52,11 @@ export async function DELETE(
 ) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const { id } = await context.params;
-    const ok = await deleteNote(id, user?.id);
+    const ok = await deleteNote(id, user.id);
     if (!ok) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }

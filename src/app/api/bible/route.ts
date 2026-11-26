@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { env } from "cloudflare:workers";
 import { BibleChapterResponse, BibleVerse } from "@/lib/types";
-import { parseScriptureReference } from "@/lib/bible-books";
+import { BIBLE_BOOKS, parseScriptureReference } from "@/lib/bible-books";
 
 const chapterCache = new Map<string, BibleChapterResponse>();
 
@@ -368,9 +368,20 @@ export async function GET(request: Request) {
       return NextResponse.json(cached);
     }
 
+    const parsed = parseScriptureReference(passage);
+    const matchedBook = parsed
+      ? BIBLE_BOOKS.find((b) => b.name === parsed.book)
+      : undefined;
+    const isSingleChapterWholeBook = Boolean(
+      parsed && matchedBook?.chapters === 1 && !parsed.verse
+    );
+    const queryPassage = isSingleChapterWholeBook ? parsed!.book : passage;
+
     const url = `https://bible-api.com/${encodeURIComponent(
-      passage
-    )}?translation=${encodeURIComponent(translation)}`;
+      queryPassage
+    )}?translation=${encodeURIComponent(translation)}${
+      !passage.includes(":") ? "&single_chapter_book_matching=indifferent" : ""
+    }`;
 
     const res = await fetch(url, {
       headers: { Accept: "application/json" },

@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
+import { getSessionUser } from "@/lib/auth";
 import { ChatMessage } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Please sign in to ask Lamp AI." },
+        { status: 401 }
+      );
+    }
+
     const apiKey = resolveApiKey(request);
     const model = resolveModel(request);
 

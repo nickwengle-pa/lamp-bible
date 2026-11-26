@@ -6,11 +6,14 @@ import { StudyNote } from "@/lib/types";
 export async function GET(request: Request) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const { searchParams } = new URL(request.url);
     const q = searchParams.get("q")?.toLowerCase().trim() || "";
     const type = searchParams.get("type")?.toLowerCase().trim() || "all";
 
-    let notes = await getAllNotes(user?.id);
+    let notes = await getAllNotes(user.id);
 
     if (type && type !== "all") {
       notes = notes.filter((n) => n.sourceType === type);
@@ -46,6 +49,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const body = (await request.json()) as Partial<StudyNote>;
     const now = new Date().toISOString();
 
@@ -79,7 +85,7 @@ export async function POST(request: Request) {
       durationSeconds: body.durationSeconds,
     };
 
-    const created = await createNote(newNote, user?.id);
+    const created = await createNote(newNote, user.id);
     return NextResponse.json({ note: created }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create note";

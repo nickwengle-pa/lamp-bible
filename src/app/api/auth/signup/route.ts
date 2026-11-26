@@ -14,6 +14,7 @@ export async function POST(request: Request) {
       displayName?: string;
       church?: string;
       inviteCode?: string;
+      ownerSetupKey?: string;
     };
 
     const { user, isFirstUser } = await registerUser({
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
       displayName: body.displayName || "",
       church: body.church,
       inviteCode: body.inviteCode,
+      ownerSetupKey: body.ownerSetupKey,
     });
 
     if (isFirstUser) {

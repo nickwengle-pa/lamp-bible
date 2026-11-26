@@ -1,12 +1,17 @@
 import { AppSettings, StudyNote } from "./types";
 
-const SETTINGS_KEY = "vessel_app_settings_v1";
+const LEGACY_SETTINGS_KEY = "vessel_app_settings_v1";
+const THEME_KEY = "lamp_theme_v1";
+
+function scopedSettingsKey(userId: string): string {
+  return `lamp_settings_v2_${userId}`;
+}
 
 export const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: "",
-  geminiModel: "gemini-flash-lite-latest",
+  geminiModel: "",
   esvApiKey: "",
-  defaultTranslation: "esv",
+  defaultTranslation: "",
   theme: "light",
 };
 
@@ -18,24 +23,83 @@ const LEGACY_MODELS = new Set([
   "gemini-1.5-pro",
 ]);
 
-export function loadSettings(): AppSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+export function loadThemePreference(): "light" | "dark" {
+  if (typeof window === "undefined") return "light";
   try {
-    const raw = window.localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as AppSettings;
-    if (LEGACY_MODELS.has(parsed.geminiModel)) {
-      parsed.geminiModel = DEFAULT_SETTINGS.geminiModel;
+    const saved = window.localStorage.getItem(THEME_KEY);
+    if (saved === "dark" || saved === "light") return saved;
+    const legacy = window.localStorage.getItem(LEGACY_SETTINGS_KEY);
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as { theme?: string };
+      if (parsed.theme === "dark") return "dark";
     }
-    return parsed;
   } catch {
-    return DEFAULT_SETTINGS;
+    // ignore
+  }
+  return "light";
+}
+
+/**
+ * Loads settings scoped to the signed-in account so personal API keys and
+ * preferences never leak across accounts sharing the same browser.
+ */
+export function loadSettings(
+  userId?: string,
+  userRole?: "admin" | "member"
+): AppSettings {
+  const base: AppSettings = {
+    ...DEFAULT_SETTINGS,
+    theme: loadThemePreference(),
+  };
+  if (typeof window === "undefined" || !userId) return base;
+
+  try {
+    const scopedRaw = window.localStorage.getItem(scopedSettingsKey(userId));
+    if (scopedRaw) {
+      const parsed = { ...base, ...JSON.parse(scopedRaw) } as AppSettings;
+      if (LEGACY_MODELS.has(parsed.geminiModel)) {
+        parsed.geminiModel = "";
+      }
+      if (userRole !== "admin") {
+        parsed.geminiApiKey = "";
+        parsed.esvApiKey = "";
+        parsed.geminiModel = "";
+      }
+      return parsed;
+    }
+
+    // One-time migration of legacy unscoped browser settings ONLY for the owner account
+    if (userRole === "admin") {
+      const legacyRaw = window.localStorage.getItem(LEGACY_SETTINGS_KEY);
+      if (legacyRaw) {
+        const parsed = { ...base, ...JSON.parse(legacyRaw) } as AppSettings;
+        if (
+          LEGACY_MODELS.has(parsed.geminiModel) ||
+          parsed.geminiModel === "gemini-flash-lite-latest"
+        ) {
+          parsed.geminiModel = "";
+        }
+        window.localStorage.setItem(
+          scopedSettingsKey(userId),
+          JSON.stringify(parsed)
+        );
+        // Remove unscoped legacy record so other accounts on this browser never inherit keys
+        window.localStorage.removeItem(LEGACY_SETTINGS_KEY);
+        return parsed;
+      }
+    }
+
+    return base;
+  } catch {
+    return base;
   }
 }
 
-export function saveSettings(settings: AppSettings): void {
+export function saveSettings(settings: AppSettings, userId?: string): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  window.localStorage.setItem(THEME_KEY, settings.theme);
+  if (!userId) return;
+  window.localStorage.setItem(scopedSettingsKey(userId), JSON.stringify(settings));
 }
 
 export function aiHeaders(settings: AppSettings): Record<string, string> {
@@ -45,6 +109,7 @@ export function aiHeaders(settings: AppSettings): Record<string, string> {
   if (settings.geminiApiKey.trim()) {
     headers["x-gemini-api-key"] = settings.geminiApiKey.trim();
   }
+  // Only send x-gemini-model when an explicit override is chosen so server GEMINI_MODEL applies by default
   if (settings.geminiModel.trim()) {
     headers["x-gemini-model"] = settings.geminiModel.trim();
   }

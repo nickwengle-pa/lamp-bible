@@ -25,7 +25,13 @@ import {
   UserProfile,
   VerseHighlight,
 } from "@/lib/types";
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "@/lib/client-api";
+import {
+  DEFAULT_SETTINGS,
+  formatDuration,
+  loadSettings,
+  loadThemePreference,
+  saveSettings,
+} from "@/lib/client-api";
 import { parseScriptureReference } from "@/lib/bible-books";
 import LibraryView from "./LibraryView";
 import SermonRecorderView from "./SermonRecorderView";
@@ -69,27 +75,52 @@ export default function VesselApp() {
   const [serverConfig, setServerConfig] = useState<{
     hasServerGeminiKey: boolean;
     hasServerEsvKey: boolean;
-  }>({ hasServerGeminiKey: false, hasServerEsvKey: false });
+    hasServerApiBibleKey?: boolean;
+  }>({ hasServerGeminiKey: false, hasServerEsvKey: false, hasServerApiBibleKey: false });
+  const [configLoaded, setConfigLoaded] = useState(false);
 
   // Multi-user Auth & Profile state
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [userCount, setUserCount] = useState(0);
   const [inviteRequired, setInviteRequired] = useState(false);
+  const [ownerSetupRequired, setOwnerSetupRequired] = useState(false);
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [inviteCode, setInviteCode] = useState("");
+
+  // Live Sermon Recorder background status (kept mounted across tab switches!)
+  const [recorderStatus, setRecorderStatus] = useState<{
+    isRecording: boolean;
+    isPaused: boolean;
+    seconds: number;
+    hasUnsaved: boolean;
+  }>({ isRecording: false, isPaused: false, seconds: 0, hasUnsaved: false });
 
   const [bibleTarget, setBibleTarget] = useState<{
     book: string;
     chapter: number;
     verse?: number;
+    translation?: string;
   }>({ book: "John", chapter: 1, verse: 1 });
 
   useEffect(() => {
-    const loaded = loadSettings();
-    setSettings(loaded);
-    document.documentElement.classList.toggle("dark", loaded.theme === "dark");
+    const theme = loadThemePreference();
+    setSettings({ ...DEFAULT_SETTINGS, theme });
+    document.documentElement.classList.toggle("dark", theme === "dark");
   }, []);
+
+  // Scope browser settings & API credentials strictly to the signed-in account
+  useEffect(() => {
+    if (user) {
+      const scoped = loadSettings(user.id, user.role);
+      setSettings(scoped);
+      document.documentElement.classList.toggle("dark", scoped.theme === "dark");
+    } else {
+      const theme = loadThemePreference();
+      setSettings({ ...DEFAULT_SETTINGS, theme });
+      document.documentElement.classList.toggle("dark", theme === "dark");
+    }
+  }, [user?.id, user?.role]);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -99,12 +130,14 @@ export default function VesselApp() {
           user: UserProfile | null;
           userCount: number;
           inviteRequired: boolean;
+          ownerSetupRequired?: boolean;
           members?: UserProfile[];
           inviteCode?: string;
         };
         setUser(data.user);
         setUserCount(data.userCount || 0);
         setInviteRequired(Boolean(data.inviteRequired));
+        setOwnerSetupRequired(Boolean(data.ownerSetupRequired));
         setMembers(data.members || []);
         setInviteCode(data.inviteCode || "");
       }
@@ -119,7 +152,7 @@ export default function VesselApp() {
 
   const handleUpdateSettings = (next: AppSettings) => {
     setSettings(next);
-    saveSettings(next);
+    saveSettings(next, user?.id);
     document.documentElement.classList.toggle("dark", next.theme === "dark");
   };
 
@@ -139,16 +172,27 @@ export default function VesselApp() {
         fetch("/api/config-status"),
       ]);
       if (notesRes.ok) {
-        const data = await notesRes.json();
+        const data = (await notesRes.json()) as { notes?: StudyNote[] };
         setNotes(data.notes || []);
       }
       if (hlRes.ok) {
-        const data = await hlRes.json();
+        const data = (await hlRes.json()) as {
+          highlights?: Record<string, VerseHighlight>;
+        };
         setHighlights(data.highlights || {});
       }
       if (cfgRes.ok) {
-        const data = await cfgRes.json();
-        setServerConfig(data);
+        const data = (await cfgRes.json()) as {
+          hasServerGeminiKey?: boolean;
+          hasServerEsvKey?: boolean;
+          hasServerApiBibleKey?: boolean;
+        };
+        setServerConfig({
+          hasServerGeminiKey: Boolean(data.hasServerGeminiKey),
+          hasServerEsvKey: Boolean(data.hasServerEsvKey),
+          hasServerApiBibleKey: Boolean(data.hasServerApiBibleKey),
+        });
+        setConfigLoaded(true);
       }
     } finally {
       setLoadingNotes(false);
@@ -169,8 +213,31 @@ export default function VesselApp() {
     setSelectedNoteId(null);
     setSettingsOpen(false);
     setMobileMenuOpen(false);
+    const theme = loadThemePreference();
+    setSettings({ ...DEFAULT_SETTINGS, theme });
+    setRecorderStatus({
+      isRecording: false,
+      isPaused: false,
+      seconds: 0,
+      hasUnsaved: false,
+    });
     refreshAuth();
   };
+
+  // Resolve effective default translation: preserve explicit choice, else pick ESV if configured or keyless BSB
+  const effectiveDefaultTranslation = useMemo(() => {
+    if (settings.defaultTranslation) return settings.defaultTranslation;
+    if (settings.esvApiKey?.trim() || serverConfig.hasServerEsvKey) return "esv";
+    return "bsb";
+  }, [settings.defaultTranslation, settings.esvApiKey, serverConfig.hasServerEsvKey]);
+
+  const effectiveSettings = useMemo<AppSettings>(
+    () => ({
+      ...settings,
+      defaultTranslation: effectiveDefaultTranslation,
+    }),
+    [settings, effectiveDefaultTranslation]
+  );
 
   const existingSeries = useMemo(() => {
     const set = new Set<string>();
@@ -195,10 +262,11 @@ export default function VesselApp() {
       body: JSON.stringify(payload),
     });
     if (!res.ok) return null;
-    const data = await res.json();
+    const data = (await res.json()) as { note?: StudyNote };
     if (data.note) {
-      setNotes((prev) => [data.note, ...prev]);
-      return data.note;
+      const created = data.note;
+      setNotes((prev) => [created, ...prev]);
+      return created;
     }
     return null;
   };
@@ -210,8 +278,11 @@ export default function VesselApp() {
       body: JSON.stringify(updates),
     });
     if (res.ok) {
-      const data = await res.json();
-      setNotes((prev) => prev.map((n) => (n.id === id ? data.note : n)));
+      const data = (await res.json()) as { note?: StudyNote };
+      if (data.note) {
+        const updated = data.note;
+        setNotes((prev) => prev.map((n) => (n.id === id ? updated : n)));
+      }
     }
   };
 
@@ -237,7 +308,9 @@ export default function VesselApp() {
       body: JSON.stringify({ book, chapter, verse, color, note }),
     });
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as {
+        highlights?: Record<string, VerseHighlight>;
+      };
       if (data.highlights) setHighlights(data.highlights);
     }
   };
@@ -248,7 +321,9 @@ export default function VesselApp() {
       { method: "DELETE" }
     );
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as {
+        highlights?: Record<string, VerseHighlight>;
+      };
       if (data.highlights) setHighlights(data.highlights);
     }
   };
@@ -256,11 +331,12 @@ export default function VesselApp() {
   const handleOpenScripture = (reference: string) => {
     const parsed = parseScriptureReference(reference);
     if (parsed) {
-      setBibleTarget({
+      setBibleTarget((prev) => ({
         book: parsed.book,
         chapter: parsed.chapter,
         verse: parsed.verse,
-      });
+        translation: prev.translation,
+      }));
     }
     setActiveTab("bible");
   };
@@ -283,6 +359,7 @@ export default function VesselApp() {
       <AuthScreen
         userCount={userCount}
         inviteRequired={inviteRequired}
+        ownerSetupRequired={ownerSetupRequired}
         onAuthenticated={(signedInUser) => {
           setUser(signedInUser);
           refreshAuth();
@@ -556,10 +633,40 @@ export default function VesselApp() {
       {/* Main Content Workspace */}
       <main className="flex-1 min-w-0 w-full lg:pl-64 pb-24 lg:pb-8">
         <div className="w-full max-w-full px-3.5 sm:px-8 py-5 sm:py-8">
+          {/* Active background recording/draft banner when navigating to Bible or other tabs */}
+          {activeTab !== "record" &&
+            (recorderStatus.isRecording || recorderStatus.hasUnsaved) && (
+              <div className="max-w-5xl mx-auto mb-4 rounded-2xl bg-[#FAF4E8] dark:bg-[#251E15] border border-[#DFC9A3] dark:border-[#4A3A22] px-4 py-2.5 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                      recorderStatus.isRecording && !recorderStatus.isPaused
+                        ? "bg-rose-500 animate-pulse"
+                        : "bg-amber-500"
+                    }`}
+                  />
+                  <span className="font-medium text-[#5F4114] dark:text-[#E8C98F] truncate">
+                    {recorderStatus.isRecording
+                      ? recorderStatus.isPaused
+                        ? `Sermon recording paused (${formatDuration(recorderStatus.seconds) || "0:00"})`
+                        : `Recording sermon in background (${formatDuration(recorderStatus.seconds) || "0:00"})`
+                      : "You have an unsaved sermon recording or notes in progress"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("record")}
+                  className="px-3 py-1 rounded-lg bg-[#9A6B24] hover:bg-[#7B531A] text-white font-semibold shrink-0 transition"
+                >
+                  Return to Recorder
+                </button>
+              </div>
+            )}
+
           {activeTab === "library" && (
             <>
               <LibraryView
-                settings={settings}
+                settings={effectiveSettings}
                 notes={notes}
                 loading={loadingNotes}
                 selectedNoteId={selectedNoteId}
@@ -570,7 +677,7 @@ export default function VesselApp() {
                 onQuickNavigate={(tab) => setActiveTab(tab)}
               />
 
-              {!selectedNoteId && (
+              {!selectedNoteId && configLoaded && (
                 <section className="max-w-5xl mx-auto mt-4 pt-8 border-t border-[#E6DCCB] dark:border-[#2A2520] pb-16">
                   <div className="mb-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
@@ -582,9 +689,10 @@ export default function VesselApp() {
                   </div>
                   <BibleReaderView
                     embedded
-                    settings={settings}
+                    settings={effectiveSettings}
                     initialBook={bibleTarget.book}
                     initialChapter={bibleTarget.chapter}
+                    initialTranslation={bibleTarget.translation}
                     highlightVerse={bibleTarget.verse}
                     notes={notes}
                     highlights={highlights}
@@ -593,7 +701,10 @@ export default function VesselApp() {
                     onOpenLibraryNote={handleOpenLibraryNote}
                     onSaveVerseNote={handleSaveManualNote}
                     onOpenSettings={() => setSettingsOpen(true)}
-                    onExpandFullScreen={() => setActiveTab("bible")}
+                    onExpandFullScreen={(loc) => {
+                      setBibleTarget(loc);
+                      setActiveTab("bible");
+                    }}
                   />
                 </section>
               )}
@@ -602,24 +713,26 @@ export default function VesselApp() {
 
           {activeTab === "words" && (
             <WordStudyView
-              settings={settings}
+              settings={effectiveSettings}
               onOpenScripture={handleOpenScripture}
               onNoteCreated={handleNoteCreated}
             />
           )}
 
-          {activeTab === "record" && (
+          {/* Keep SermonRecorderView mounted across tab switches so active recordings & drafts are never lost */}
+          <div className={activeTab === "record" ? "block" : "hidden"}>
             <SermonRecorderView
-              settings={settings}
+              settings={effectiveSettings}
               existingSeries={existingSeries}
               onNoteCreated={handleNoteCreated}
               onOpenSettings={() => setSettingsOpen(true)}
+              onRecordingStatusChange={setRecorderStatus}
             />
-          )}
+          </div>
 
           {activeTab === "youtube" && (
             <YouTubeSummarizerView
-              settings={settings}
+              settings={effectiveSettings}
               existingSeries={existingSeries}
               onNoteCreated={handleNoteCreated}
               onOpenSettings={() => setSettingsOpen(true)}
@@ -628,9 +741,10 @@ export default function VesselApp() {
 
           {activeTab === "bible" && (
             <BibleReaderView
-              settings={settings}
+              settings={effectiveSettings}
               initialBook={bibleTarget.book}
               initialChapter={bibleTarget.chapter}
+              initialTranslation={bibleTarget.translation}
               highlightVerse={bibleTarget.verse}
               notes={notes}
               highlights={highlights}
@@ -644,7 +758,7 @@ export default function VesselApp() {
 
           {activeTab === "scan" && (
             <ScriptureScannerView
-              settings={settings}
+              settings={effectiveSettings}
               onOpenScripture={handleOpenScripture}
               onSaveScanNote={handleSaveManualNote}
               onOpenSettings={() => setSettingsOpen(true)}

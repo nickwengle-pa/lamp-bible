@@ -58,7 +58,7 @@ export default function YouTubeSummarizerView({
         body: JSON.stringify({ url: rawUrl, previewOnly: true }),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { meta?: PreviewMeta };
         setPreview(data.meta || null);
       } else {
         setPreview(null);
@@ -87,8 +87,8 @@ export default function YouTubeSummarizerView({
           manualTranscript: manualTranscript.trim() || undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = (await res.json()) as { note?: StudyNote; error?: string };
+      if (!res.ok || !data.note) {
         throw new Error(data.error || "Could not summarize YouTube sermon.");
       }
       onNoteCreated(data.note);

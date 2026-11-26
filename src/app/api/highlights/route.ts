@@ -10,7 +10,10 @@ import { HighlightColor, VerseHighlight } from "@/lib/types";
 export async function GET(request: Request) {
   try {
     const user = await getSessionUser(request);
-    const highlights = await getAllHighlights(user?.id);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
+    const highlights = await getAllHighlights(user.id);
     return NextResponse.json({ highlights });
   } catch (err) {
     const message =
@@ -22,6 +25,9 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const body = (await request.json()) as {
       book?: string;
       chapter?: number;
@@ -48,7 +54,7 @@ export async function PUT(request: Request) {
       updatedAt: new Date().toISOString(),
     };
 
-    const highlights = await upsertHighlight(entry, user?.id);
+    const highlights = await upsertHighlight(entry, user.id);
     return NextResponse.json({ highlights, highlight: entry });
   } catch (err) {
     const message =
@@ -60,12 +66,15 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
     const { searchParams } = new URL(request.url);
     const key = searchParams.get("key")?.trim();
     if (!key) {
       return NextResponse.json({ error: "Missing key" }, { status: 400 });
     }
-    const highlights = await deleteHighlight(key, user?.id);
+    const highlights = await deleteHighlight(key, user.id);
     return NextResponse.json({ highlights });
   } catch (err) {
     const message =

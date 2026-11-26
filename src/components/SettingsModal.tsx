@@ -12,8 +12,6 @@ import {
   Moon,
   Download,
   Sparkles,
-  Lock,
-  ShieldCheck,
   User,
   Users,
   LogOut,
@@ -36,13 +34,12 @@ interface SettingsModalProps {
   serverConfig?: {
     hasServerGeminiKey: boolean;
     hasServerEsvKey: boolean;
+    hasServerApiBibleKey?: boolean;
   };
-  lockEnabled?: boolean;
-  onLockChanged?: (enabled: boolean) => void;
 }
 
 const FALLBACK_GEMINI_MODELS = [
-  { id: "gemini-flash-lite-latest", label: "Gemini Flash-Lite Latest (Recommended — Fast)" },
+  { id: "gemini-flash-lite-latest", label: "Gemini Flash-Lite Latest (Fast)" },
   { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite" },
   { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
 ];
@@ -59,8 +56,6 @@ export default function SettingsModal({
   onProfileUpdated,
   onSignOut,
   serverConfig,
-  lockEnabled = false,
-  onLockChanged,
 }: SettingsModalProps) {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [models, setModels] = useState(FALLBACK_GEMINI_MODELS);
@@ -78,15 +73,6 @@ export default function SettingsModal({
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
-  // Privacy Passcode state
-  const [currentPin, setCurrentPin] = useState("");
-  const [newPin, setNewPin] = useState("");
-  const [pinBusy, setPinBusy] = useState(false);
-  const [pinStatus, setPinStatus] = useState<{
-    ok: boolean;
-    message: string;
-  } | null>(null);
-
   const fetchAvailableModels = React.useCallback(async (cfg: AppSettings) => {
     setLoadingModels(true);
     try {
@@ -94,7 +80,9 @@ export default function SettingsModal({
         headers: aiHeaders(cfg),
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as {
+          models?: { id: string; label: string }[];
+        };
         if (Array.isArray(data.models) && data.models.length > 0) {
           setModels(data.models);
         }
@@ -165,11 +153,15 @@ export default function SettingsModal({
         method: "POST",
         headers: aiHeaders(draft),
       });
-      const data = await res.json();
+      const data = (await res.json()) as {
+        ok?: boolean;
+        model?: string;
+        error?: string;
+      };
       if (res.ok && data.ok) {
         setTestResult({
           ok: true,
-          message: `Connected cleanly to ${data.model}!`,
+          message: `Connected cleanly to ${data.model || "Gemini"}!`,
         });
         fetchAvailableModels(draft);
       } else {
@@ -185,66 +177,6 @@ export default function SettingsModal({
       });
     } finally {
       setTesting(false);
-    }
-  };
-
-  const handleSetPin = async () => {
-    setPinBusy(true);
-    setPinStatus(null);
-    try {
-      const res = await fetch("/api/lock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "set",
-          pin: newPin,
-          currentPin: lockEnabled ? currentPin : undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setPinStatus({ ok: false, message: data.error || "Could not set passcode." });
-      } else {
-        setPinStatus({ ok: true, message: "Privacy passcode saved on Cloudflare!" });
-        setCurrentPin("");
-        setNewPin("");
-        onLockChanged?.(true);
-      }
-    } catch {
-      setPinStatus({ ok: false, message: "Network error saving passcode." });
-    } finally {
-      setPinBusy(false);
-    }
-  };
-
-  const handleRemovePin = async () => {
-    setPinBusy(true);
-    setPinStatus(null);
-    try {
-      const res = await fetch("/api/lock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "remove",
-          currentPin,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        setPinStatus({
-          ok: false,
-          message: data.error || "Enter current passcode to remove lock.",
-        });
-      } else {
-        setPinStatus({ ok: true, message: "Privacy passcode removed." });
-        setCurrentPin("");
-        setNewPin("");
-        onLockChanged?.(false);
-      }
-    } catch {
-      setPinStatus({ ok: false, message: "Network error removing passcode." });
-    } finally {
-      setPinBusy(false);
     }
   };
 
@@ -478,14 +410,18 @@ export default function SettingsModal({
                   }
                   className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
                 >
+                  <option value="">Server Default (Recommended)</option>
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label}
                     </option>
                   ))}
-                  {!models.some((m) => m.id === draft.geminiModel) && (
-                    <option value={draft.geminiModel}>{draft.geminiModel}</option>
-                  )}
+                  {draft.geminiModel &&
+                    !models.some((m) => m.id === draft.geminiModel) && (
+                      <option value={draft.geminiModel}>
+                        {draft.geminiModel}
+                      </option>
+                    )}
                 </select>
               </div>
 
@@ -530,7 +466,12 @@ export default function SettingsModal({
               Default Bible Translation
             </label>
             <select
-              value={draft.defaultTranslation}
+              value={
+                draft.defaultTranslation ||
+                (serverConfig?.hasServerEsvKey || draft.esvApiKey?.trim()
+                  ? "esv"
+                  : "bsb")
+              }
               onChange={(e) =>
                 setDraft({ ...draft, defaultTranslation: e.target.value })
               }

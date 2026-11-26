@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { DEFAULT_GEMINI_MODEL, resolveApiKey } from "@/lib/gemini";
+import { getSessionUser } from "@/lib/auth";
 
 interface RawGeminiModel {
   name?: string;
@@ -9,6 +10,11 @@ interface RawGeminiModel {
 
 export async function GET(request: Request) {
   try {
+    const user = await getSessionUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
+
     const apiKey = resolveApiKey(request);
     if (!apiKey) {
       return NextResponse.json({
