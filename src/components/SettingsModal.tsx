@@ -29,10 +29,8 @@ interface SettingsModalProps {
   };
 }
 
-const GEMINI_MODELS = [
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Recommended — Latest & Fast)" },
-  { id: "gemini-3.8-pro", label: "Gemini 3.8 Pro (Deeper Theological Analysis)" },
-  { id: "gemini-3.8-flash-lite", label: "Gemini 3.8 Flash-Lite (Ultra Lightweight)" },
+const FALLBACK_GEMINI_MODELS = [
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Recommended)" },
 ];
 
 export default function SettingsModal({
@@ -44,16 +42,40 @@ export default function SettingsModal({
   serverConfig,
 }: SettingsModalProps) {
   const [draft, setDraft] = useState<AppSettings>(settings);
+  const [models, setModels] = useState(FALLBACK_GEMINI_MODELS);
+  const [loadingModels, setLoadingModels] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     ok: boolean;
     message: string;
   } | null>(null);
 
+  const fetchAvailableModels = React.useCallback(async (cfg: AppSettings) => {
+    setLoadingModels(true);
+    try {
+      const res = await fetch("/api/ai/models", {
+        headers: aiHeaders(cfg),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setModels(data.models);
+        }
+      }
+    } catch {
+      // Keep fallback
+    } finally {
+      setLoadingModels(false);
+    }
+  }, []);
+
   React.useEffect(() => {
     setDraft(settings);
     setTestResult(null);
-  }, [settings, open]);
+    if (open) {
+      fetchAvailableModels(settings);
+    }
+  }, [settings, open, fetchAvailableModels]);
 
   if (!open) return null;
 
@@ -76,6 +98,7 @@ export default function SettingsModal({
           ok: true,
           message: `Connected cleanly to ${data.model}!`,
         });
+        fetchAvailableModels(draft);
       } else {
         setTestResult({
           ok: false,
@@ -201,7 +224,17 @@ export default function SettingsModal({
 
           {/* Model Selection */}
           <div className="space-y-1.5">
-            <label className="text-sm font-medium block">Gemini Model</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium block">Gemini Model</label>
+              <button
+                type="button"
+                onClick={() => fetchAvailableModels(draft)}
+                disabled={loadingModels}
+                className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline disabled:opacity-50"
+              >
+                {loadingModels ? "Loading models..." : "Refresh live models"}
+              </button>
+            </div>
             <select
               value={draft.geminiModel}
               onChange={(e) =>
@@ -209,11 +242,14 @@ export default function SettingsModal({
               }
               className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
             >
-              {GEMINI_MODELS.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>
               ))}
+              {!models.some((m) => m.id === draft.geminiModel) && (
+                <option value={draft.geminiModel}>{draft.geminiModel}</option>
+              )}
             </select>
           </div>
 
