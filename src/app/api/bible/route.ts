@@ -5,6 +5,21 @@ import { parseScriptureReference } from "@/lib/bible-books";
 
 const chapterCache = new Map<string, BibleChapterResponse>();
 
+const API_BIBLE_VERSIONS: Record<string, { bibleId: string; name: string }> = {
+  niv: {
+    bibleId: "78a9f6124f344018-01",
+    name: "New International Version (NIV)",
+  },
+  nlt: {
+    bibleId: "d6e14a625393b4da-01",
+    name: "New Living Translation (NLT)",
+  },
+  nasb: {
+    bibleId: "a761ca71e0b3ddcf-01",
+    name: "New American Standard Bible (NASB)",
+  },
+};
+
 function resolveEsvKey(request: Request): string | null {
   const headerKey = request.headers.get("x-esv-api-key")?.trim();
   if (headerKey) return headerKey;
@@ -14,6 +29,88 @@ function resolveEsvKey(request: Request): string | null {
   const envKey = process.env.ESV_API_KEY?.trim();
   if (envKey) return envKey;
   return null;
+}
+
+function resolveApiBibleKey(request: Request): string | null {
+  const headerKey = request.headers.get("x-api-bible-key")?.trim();
+  if (headerKey) return headerKey;
+  const cfEnv = env as unknown as Record<string, string | undefined>;
+  const cfKey = cfEnv?.API_BIBLE_KEY?.trim();
+  if (cfKey) return cfKey;
+  const envKey = process.env.API_BIBLE_KEY?.trim();
+  if (envKey) return envKey;
+  return null;
+}
+
+async function fetchApiBiblePassage(
+  passage: string,
+  translationId: string,
+  apiKey: string
+): Promise<BibleChapterResponse> {
+  const meta = API_BIBLE_VERSIONS[translationId];
+  if (!meta) {
+    throw new Error(`Unsupported API.Bible translation "${translationId}".`);
+  }
+  const parsed = parseScriptureReference(passage);
+  if (!parsed) {
+    throw new Error(`Could not recognize Bible passage "${passage}".`);
+  }
+
+  const chapterId = `${parsed.usfm}.${parsed.chapter}`;
+  const params = new URLSearchParams({
+    "content-type": "text",
+    "include-notes": "false",
+    "include-titles": "false",
+    "include-chapter-numbers": "false",
+    "include-verse-numbers": "true",
+    "include-verse-spans": "false",
+  });
+
+  const res = await fetch(
+    `https://rest.api.bible/v1/bibles/${encodeURIComponent(
+      meta.bibleId
+    )}/chapters/${encodeURIComponent(chapterId)}?${params.toString()}`,
+    {
+      headers: {
+        "api-key": apiKey,
+        Accept: "application/json",
+      },
+    }
+  );
+
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      `API.Bible rejected your key for ${translationId.toUpperCase()}.`
+    );
+  }
+  if (!res.ok) {
+    throw new Error(
+      `Could not load ${translationId.toUpperCase()} passage "${parsed.book} ${parsed.chapter}" (${res.status}).`
+    );
+  }
+
+  const payload = (await res.json()) as {
+    data?: {
+      reference?: string;
+      content?: string;
+    };
+  };
+
+  const fullText = (payload.data?.content || "").trim();
+  if (!fullText) {
+    throw new Error(
+      `No ${translationId.toUpperCase()} verses found for "${parsed.book} ${parsed.chapter}".`
+    );
+  }
+
+  const verses = parseEsvVerses(fullText, parsed.book, parsed.chapter);
+  return {
+    reference: payload.data?.reference || `${parsed.book} ${parsed.chapter}`,
+    translation_id: translationId,
+    translation_name: meta.name,
+    verses,
+    text: verses.map((v) => v.text).join(" "),
+  };
 }
 
 function parseEsvVerses(
@@ -201,6 +298,30 @@ export async function GET(request: Request) {
     const passage = searchParams.get("passage")?.trim() || "John 15";
     const translation =
       searchParams.get("translation")?.trim().toLowerCase() || "bsb";
+
+    if (translation in API_BIBLE_VERSIONS) {
+      const apiBibleKey = resolveApiBibleKey(request);
+      if (!apiBibleKey) {
+        return NextResponse.json(
+          {
+            error: `API.Bible key is not configured for ${translation.toUpperCase()}.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const cacheKey = `${translation}::${passage.toLowerCase()}`;
+      const cached = chapterCache.get(cacheKey);
+      if (cached) return NextResponse.json(cached);
+
+      const data = await fetchApiBiblePassage(passage, translation, apiBibleKey);
+      if (chapterCache.size > 200) {
+        const firstKey = chapterCache.keys().next().value;
+        if (firstKey) chapterCache.delete(firstKey);
+      }
+      chapterCache.set(cacheKey, data);
+      return NextResponse.json(data);
+    }
 
     if (translation === "bsb") {
       const cacheKey = `bsb::${passage.toLowerCase()}`;

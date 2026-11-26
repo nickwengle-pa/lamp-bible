@@ -73,6 +73,9 @@ export const BIBLE_BOOKS: BibleBook[] = [
 
 export const BIBLE_TRANSLATIONS = [
   { id: "esv", name: "English Standard Version (ESV)", short: "ESV" },
+  { id: "niv", name: "New International Version (NIV)", short: "NIV" },
+  { id: "nlt", name: "New Living Translation (NLT)", short: "NLT" },
+  { id: "nasb", name: "New American Standard Bible (NASB)", short: "NASB" },
   { id: "bsb", name: "Berean Standard Bible (BSB)", short: "BSB" },
   { id: "web", name: "World English Bible (WEB)", short: "WEB" },
   { id: "kjv", name: "King James Version (KJV)", short: "KJV" },
