@@ -87,6 +87,7 @@ export interface BibleBook {
 export interface AppSettings {
   geminiApiKey: string;
   geminiModel: string;
+  esvApiKey?: string;
   defaultTranslation: string;
   theme: "light" | "dark";
 }

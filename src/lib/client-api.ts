@@ -4,17 +4,29 @@ const SETTINGS_KEY = "vessel_app_settings_v1";
 
 export const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: "",
-  geminiModel: "gemini-2.5-flash",
+  geminiModel: "gemini-3.8-flash",
+  esvApiKey: "",
   defaultTranslation: "web",
   theme: "light",
 };
+
+const LEGACY_MODELS = new Set([
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+]);
 
 export function loadSettings(): AppSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as AppSettings;
+    if (LEGACY_MODELS.has(parsed.geminiModel)) {
+      parsed.geminiModel = DEFAULT_SETTINGS.geminiModel;
+    }
+    return parsed;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -34,6 +46,14 @@ export function aiHeaders(settings: AppSettings): Record<string, string> {
   }
   if (settings.geminiModel.trim()) {
     headers["x-gemini-model"] = settings.geminiModel.trim();
+  }
+  return headers;
+}
+
+export function bibleHeaders(settings: AppSettings): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (settings.esvApiKey?.trim()) {
+    headers["x-esv-api-key"] = settings.esvApiKey.trim();
   }
   return headers;
 }

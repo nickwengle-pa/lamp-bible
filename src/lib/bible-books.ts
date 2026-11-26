@@ -72,6 +72,7 @@ export const BIBLE_BOOKS: BibleBook[] = [
 ];
 
 export const BIBLE_TRANSLATIONS = [
+  { id: "esv", name: "English Standard Version (ESV — API Key)", short: "ESV" },
   { id: "web", name: "World English Bible (WEB)", short: "WEB" },
   { id: "kjv", name: "King James Version (KJV)", short: "KJV" },
   { id: "asv", name: "American Standard Version (ASV)", short: "ASV" },

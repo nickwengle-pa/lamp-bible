@@ -32,11 +32,22 @@ export function resolveApiKey(request: Request): string | null {
   return null;
 }
 
+const DEPRECATED_MODELS = new Set([
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
+]);
+
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
 export function resolveModel(request: Request): string {
   const headerModel = request.headers.get("x-gemini-model")?.trim();
-  if (headerModel) return headerModel;
+  if (headerModel && !DEPRECATED_MODELS.has(headerModel)) return headerModel;
   const cfEnv = env as unknown as Record<string, string | undefined>;
-  return cfEnv?.GEMINI_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const envModel = cfEnv?.GEMINI_MODEL?.trim() || process.env.GEMINI_MODEL?.trim();
+  if (envModel && !DEPRECATED_MODELS.has(envModel)) return envModel;
+  return DEFAULT_GEMINI_MODEL;
 }
 
 export async function callGemini<T = string>(
@@ -49,7 +60,7 @@ export async function callGemini<T = string>(
     );
   }
 
-  const model = options.model || "gemini-2.5-flash";
+  const model = options.model || DEFAULT_GEMINI_MODEL;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;

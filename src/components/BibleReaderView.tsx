@@ -29,7 +29,7 @@ import {
   BIBLE_TRANSLATIONS,
   parseScriptureReference,
 } from "@/lib/bible-books";
-import { aiHeaders } from "@/lib/client-api";
+import { aiHeaders, bibleHeaders } from "@/lib/client-api";
 
 interface BibleReaderViewProps {
   settings: AppSettings;
@@ -82,6 +82,12 @@ export default function BibleReaderView({
     setActiveHighlight(highlightVerse);
   }, [initialBook, initialChapter, highlightVerse]);
 
+  useEffect(() => {
+    if (settings.defaultTranslation) {
+      setTranslation(settings.defaultTranslation);
+    }
+  }, [settings.defaultTranslation]);
+
   const currentBookObj =
     BIBLE_BOOKS.find((b) => b.name === book) || BIBLE_BOOKS[42]; // John
 
@@ -93,7 +99,10 @@ export default function BibleReaderView({
         const res = await fetch(
           `/api/bible?passage=${encodeURIComponent(
             `${b} ${ch}`
-          )}&translation=${encodeURIComponent(trans)}`
+          )}&translation=${encodeURIComponent(trans)}`,
+          {
+            headers: bibleHeaders(settings),
+          }
         );
         const data = await res.json();
         if (!res.ok) {
@@ -108,7 +117,7 @@ export default function BibleReaderView({
         setLoadingChapter(false);
       }
     },
-    []
+    [settings.esvApiKey]
   );
 
   useEffect(() => {
@@ -417,8 +426,16 @@ export default function BibleReaderView({
               <p className="text-sm">Opening {book} {chapter}...</p>
             </div>
           ) : chapterError ? (
-            <div className="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-200 text-sm">
-              {chapterError}
+            <div className="p-5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-200 text-sm space-y-2">
+              <p>{chapterError}</p>
+              {chapterError.toLowerCase().includes("esv") && (
+                <button
+                  onClick={onOpenSettings}
+                  className="text-xs font-semibold underline"
+                >
+                  Open Settings to add your free ESV API token →
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2 font-serif text-[19px] leading-[1.85] text-[#24201C] dark:text-[#ECE5DA]">
