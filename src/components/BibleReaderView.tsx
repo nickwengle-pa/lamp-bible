@@ -39,6 +39,7 @@ import {
   parseScriptureReference,
 } from "@/lib/bible-books";
 import { aiHeaders, bibleHeaders } from "@/lib/client-api";
+import { pronounceWord } from "@/lib/pronounce";
 import AskVesselChat from "./AskVesselChat";
 import ShareVerseModal from "./ShareVerseModal";
 
@@ -168,6 +169,7 @@ export default function BibleReaderView({
   );
   const [wordLexicon, setWordLexicon] = useState<LexiconEntry | null>(null);
   const [loadingLexicon, setLoadingLexicon] = useState(false);
+  const [speakingWord, setSpeakingWord] = useState(false);
 
   // Cross-link saved sermons/studies referencing this chapter & map to specific verses!
   const { relatedNotes, verseStudyMap } = React.useMemo(() => {
@@ -322,12 +324,15 @@ export default function BibleReaderView({
     }
   };
 
-  const speakWord = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.85;
-    window.speechSynthesis.speak(utter);
+  const speakWord = (word: InterlinearWord) => {
+    pronounceWord({
+      text: word.text || word.transliteration,
+      fallbackText: word.transliteration || word.gloss,
+      language: word.language,
+      strongs: word.strongs,
+      onStart: () => setSpeakingWord(true),
+      onEnd: () => setSpeakingWord(false),
+    });
   };
 
   const handleSelectInterlinearWord = async (word: InterlinearWord) => {
@@ -1028,11 +1033,15 @@ export default function BibleReaderView({
                         </div>
                         <button
                           type="button"
-                          onClick={() => speakWord(selectedWord.transliteration)}
-                          className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] text-[11px] font-medium inline-flex items-center gap-1 hover:border-[#9A6B24]"
+                          onClick={() => speakWord(selectedWord)}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1 transition ${
+                            speakingWord
+                              ? "bg-[#F7EAD0] dark:bg-[#3A2D1B] border-[#9A6B24] text-[#7B531A] dark:text-[#DFB164]"
+                              : "bg-white dark:bg-[#1D1A17] border-[#E6DCCB] dark:border-[#322C26] hover:border-[#9A6B24]"
+                          }`}
                         >
-                          <Volume2 className="w-3.5 h-3.5 text-[#9A6B24]" />
-                          Hear
+                          <Volume2 className={`w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164] ${speakingWord ? "animate-pulse" : ""}`} />
+                          {speakingWord ? "Playing..." : "Hear"}
                         </button>
                       </div>
 

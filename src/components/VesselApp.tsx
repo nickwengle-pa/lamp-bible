@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   LogOut,
+  RefreshCw,
 } from "lucide-react";
 import {
   AppSettings,
@@ -530,13 +531,23 @@ export default function VesselApp() {
                 <Settings className="w-4 h-4 text-[#9A6B24]" />
                 Profile & Settings
               </button>
-              <button
-                onClick={handleSignOut}
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-rose-200 dark:border-rose-900/70 text-rose-700 dark:text-rose-400 text-xs font-medium"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                Sign Out
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] bg-[#FDFCFA] dark:bg-[#1D1A17] text-xs font-medium"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-[#9A6B24]" />
+                  Refresh App
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-rose-200 dark:border-rose-900/70 text-rose-700 dark:text-rose-400 text-xs font-medium"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Sign Out
+                </button>
+              </div>
             </div>
           </div>
         </div>

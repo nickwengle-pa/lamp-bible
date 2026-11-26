@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AppSettings, StudyNote } from "@/lib/types";
 import { aiHeaders } from "@/lib/client-api";
+import { pronounceWord } from "@/lib/pronounce";
 
 interface WordCard {
   strongs: string;
@@ -207,14 +208,23 @@ export default function WordStudyView({
   const [generatingStudy, setGeneratingStudy] = useState(false);
   const [guidedError, setGuidedError] = useState<string | null>(null);
 
+  const [speakingKey, setSpeakingKey] = useState<string | null>(null);
+
   const currentWord = FEATURED_WORDS[cardIndex];
 
-  const speakWord = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.85;
-    window.speechSynthesis.speak(utter);
+  const speakWord = (
+    key: string,
+    text: string,
+    opts?: { fallbackText?: string; language?: string; strongs?: string }
+  ) => {
+    pronounceWord({
+      text,
+      fallbackText: opts?.fallbackText || text,
+      language: opts?.language,
+      strongs: opts?.strongs,
+      onStart: () => setSpeakingKey(key),
+      onEnd: () => setSpeakingKey((cur) => (cur === key ? null : cur)),
+    });
   };
 
   const loadLexiconForCard = async (strongs: string) => {
@@ -436,18 +446,33 @@ export default function WordStudyView({
                           <span className="text-sm italic text-[#6B635B] dark:text-[#A39A90]">
                             {entry.transliteration}
                           </span>
-                          {entry.pronunciation && (
+                          {(entry.pronunciation || entry.lexeme) && (
                             <button
                               type="button"
                               onClick={() =>
                                 speakWord(
-                                  entry.transliteration || entry.pronunciation
+                                  `lex-${entry.strongs}-${idx}`,
+                                  entry.lexeme || entry.transliteration || entry.pronunciation,
+                                  {
+                                    fallbackText: entry.transliteration || entry.pronunciation,
+                                    strongs: entry.strongs,
+                                  }
                                 )
                               }
                               className="inline-flex items-center gap-1 text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline"
                             >
-                              <Volume2 className="w-3.5 h-3.5" />(
-                              {entry.pronunciation})
+                              <Volume2
+                                className={`w-3.5 h-3.5 ${
+                                  speakingKey === `lex-${entry.strongs}-${idx}`
+                                    ? "animate-pulse"
+                                    : ""
+                                }`}
+                              />
+                              {speakingKey === `lex-${entry.strongs}-${idx}`
+                                ? "Playing..."
+                                : entry.pronunciation
+                                ? `(${entry.pronunciation})`
+                                : "Hear"}
                             </button>
                           )}
                         </div>
@@ -527,11 +552,27 @@ export default function WordStudyView({
                   </span>
                   <button
                     type="button"
-                    onClick={() => speakWord(currentWord.transliteration)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F2ECE1] dark:bg-[#2A2520] text-xs text-[#574F47] dark:text-[#CFC5B9] hover:text-[#9A6B24] transition"
+                    onClick={() =>
+                      speakWord(`card-${currentWord.strongs}`, currentWord.original, {
+                        fallbackText: currentWord.transliteration,
+                        language: currentWord.language,
+                        strongs: currentWord.strongs,
+                      })
+                    }
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition ${
+                      speakingKey === `card-${currentWord.strongs}`
+                        ? "bg-[#F7EAD0] dark:bg-[#3A2D1B] text-[#7B531A] dark:text-[#DFB164] font-semibold"
+                        : "bg-[#F2ECE1] dark:bg-[#2A2520] text-[#574F47] dark:text-[#CFC5B9] hover:text-[#9A6B24]"
+                    }`}
                   >
-                    <Volume2 className="w-3.5 h-3.5" />
-                    {currentWord.pronunciation}
+                    <Volume2
+                      className={`w-3.5 h-3.5 ${
+                        speakingKey === `card-${currentWord.strongs}` ? "animate-pulse" : ""
+                      }`}
+                    />
+                    {speakingKey === `card-${currentWord.strongs}`
+                      ? "Playing..."
+                      : currentWord.pronunciation}
                   </button>
                 </div>
                 <p className="text-sm font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] pt-1">
