@@ -16,11 +16,13 @@ import {
   Languages,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import {
   AppSettings,
   HighlightColor,
   StudyNote,
+  UserProfile,
   VerseHighlight,
 } from "@/lib/types";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "@/lib/client-api";
@@ -33,6 +35,7 @@ import ScriptureScannerView from "./ScriptureScannerView";
 import WordStudyView from "./WordStudyView";
 import SettingsModal from "./SettingsModal";
 import LockScreen from "./LockScreen";
+import AuthScreen from "./AuthScreen";
 import { LampMark, LampTitleLockup } from "./LampBrand";
 
 type ActiveTab = "library" | "words" | "record" | "youtube" | "bible" | "scan";
@@ -71,6 +74,14 @@ export default function VesselApp() {
     hasServerEsvKey: boolean;
   }>({ hasServerGeminiKey: false, hasServerEsvKey: false });
 
+  // Multi-user Auth & Profile state
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [userCount, setUserCount] = useState(0);
+  const [inviteRequired, setInviteRequired] = useState(false);
+  const [members, setMembers] = useState<UserProfile[]>([]);
+  const [inviteCode, setInviteCode] = useState("");
+
   // Privacy Passcode Lock state
   const [checkingLock, setCheckingLock] = useState(true);
   const [lockEnabled, setLockEnabled] = useState(false);
@@ -87,6 +98,32 @@ export default function VesselApp() {
     setSettings(loaded);
     document.documentElement.classList.toggle("dark", loaded.theme === "dark");
   }, []);
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (res.ok) {
+        const data = (await res.json()) as {
+          user: UserProfile | null;
+          userCount: number;
+          inviteRequired: boolean;
+          members?: UserProfile[];
+          inviteCode?: string;
+        };
+        setUser(data.user);
+        setUserCount(data.userCount || 0);
+        setInviteRequired(Boolean(data.inviteRequired));
+        setMembers(data.members || []);
+        setInviteCode(data.inviteCode || "");
+      }
+    } finally {
+      setCheckingAuth(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
 
   // Check if Privacy Passcode Lock is enabled on Cloudflare
   useEffect(() => {
@@ -147,10 +184,21 @@ export default function VesselApp() {
   }, []);
 
   useEffect(() => {
-    if (unlocked) {
+    if (unlocked && user) {
       fetchNotesAndHighlights();
     }
-  }, [unlocked, fetchNotesAndHighlights]);
+  }, [unlocked, user?.id, fetchNotesAndHighlights]);
+
+  const handleSignOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUser(null);
+    setNotes([]);
+    setHighlights({});
+    setSelectedNoteId(null);
+    setSettingsOpen(false);
+    setMobileMenuOpen(false);
+    refreshAuth();
+  };
 
   const existingSeries = useMemo(() => {
     const set = new Set<string>();
@@ -256,11 +304,24 @@ export default function VesselApp() {
     setUnlocked(false);
   };
 
-  if (checkingLock) {
+  if (checkingLock || checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210]">
         <LampMark className="w-12 h-10 text-[#1C1917] dark:text-[#F5F0E8] animate-pulse" />
       </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AuthScreen
+        userCount={userCount}
+        inviteRequired={inviteRequired}
+        onAuthenticated={(signedInUser) => {
+          setUser(signedInUser);
+          refreshAuth();
+        }}
+      />
     );
   }
 
@@ -331,6 +392,36 @@ export default function VesselApp() {
 
         {/* Bottom Controls */}
         <div className="space-y-2 pt-4 border-t border-[#E6DCCB] dark:border-[#2A2520]">
+          {/* Signed-in User Profile Pill */}
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-[#FDFCFA] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24]">
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="flex items-center gap-2.5 min-w-0 text-left"
+            >
+              <div
+                className="h-7 w-7 rounded-full text-white text-xs font-semibold flex items-center justify-center shrink-0"
+                style={{ backgroundColor: user.avatarColor || "#9A6B24" }}
+              >
+                {user.displayName.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate">{user.displayName}</p>
+                <p className="text-[10px] text-[#786F66] dark:text-[#9C9288] truncate">
+                  {user.church || user.email}
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              title="Sign Out"
+              className="p-1.5 rounded-lg text-[#786F66] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           <button
             onClick={() => setSettingsOpen(true)}
             className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
@@ -472,6 +563,20 @@ export default function VesselApp() {
             </div>
 
             <div className="space-y-2 pt-4 border-t border-[#E6DCCB] dark:border-[#2A2520]">
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-[#FDFCFA] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24]">
+                <div
+                  className="h-8 w-8 rounded-full text-white text-xs font-semibold flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: user.avatarColor || "#9A6B24" }}
+                >
+                  {user.displayName.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate">{user.displayName}</p>
+                  <p className="text-[10px] text-[#786F66] dark:text-[#9C9288] truncate">
+                    {user.email}
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={() => {
                   setMobileMenuOpen(false);
@@ -480,7 +585,14 @@ export default function VesselApp() {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] bg-[#FDFCFA] dark:bg-[#1D1A17] text-xs font-semibold transition"
               >
                 <Settings className="w-4 h-4 text-[#9A6B24]" />
-                Settings & Keys
+                Profile & Settings
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-rose-200 dark:border-rose-900/70 text-rose-700 dark:text-rose-400 text-xs font-medium"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Sign Out
               </button>
               {lockEnabled && (
                 <button
@@ -633,6 +745,15 @@ export default function VesselApp() {
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
         notes={notes}
+        user={user}
+        members={members}
+        inviteCode={inviteCode}
+        onProfileUpdated={(updatedUser, nextInvite) => {
+          setUser(updatedUser);
+          if (nextInvite !== undefined) setInviteCode(nextInvite);
+          refreshAuth();
+        }}
+        onSignOut={handleSignOut}
         serverConfig={serverConfig}
         lockEnabled={lockEnabled}
         onLockChanged={(enabled) => {

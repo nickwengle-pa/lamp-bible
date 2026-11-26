@@ -57,6 +57,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  church?: string;
+  role: "admin" | "member";
+  avatarColor: string;
+  createdAt: string;
+}
+
 export interface VerseInsight {
   reference: string;
   translation: string;

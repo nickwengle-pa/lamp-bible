@@ -14,8 +14,11 @@ import {
   Sparkles,
   Lock,
   ShieldCheck,
+  User,
+  Users,
+  LogOut,
 } from "lucide-react";
-import { AppSettings, StudyNote } from "@/lib/types";
+import { AppSettings, StudyNote, UserProfile } from "@/lib/types";
 import { BIBLE_TRANSLATIONS } from "@/lib/bible-books";
 import { aiHeaders } from "@/lib/client-api";
 
@@ -25,6 +28,11 @@ interface SettingsModalProps {
   settings: AppSettings;
   onUpdateSettings: (next: AppSettings) => void;
   notes: StudyNote[];
+  user?: UserProfile | null;
+  members?: UserProfile[];
+  inviteCode?: string;
+  onProfileUpdated?: (user: UserProfile, nextInviteCode?: string) => void;
+  onSignOut?: () => void;
   serverConfig?: {
     hasServerGeminiKey: boolean;
     hasServerEsvKey: boolean;
@@ -45,6 +53,11 @@ export default function SettingsModal({
   settings,
   onUpdateSettings,
   notes,
+  user,
+  members = [],
+  inviteCode = "",
+  onProfileUpdated,
+  onSignOut,
   serverConfig,
   lockEnabled = false,
   onLockChanged,
@@ -57,6 +70,13 @@ export default function SettingsModal({
     ok: boolean;
     message: string;
   } | null>(null);
+
+  // Profile & Admin Invite state
+  const [profileName, setProfileName] = useState(user?.displayName || "");
+  const [profileChurch, setProfileChurch] = useState(user?.church || "");
+  const [inviteDraft, setInviteDraft] = useState(inviteCode || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
   // Privacy Passcode state
   const [currentPin, setCurrentPin] = useState("");
@@ -89,10 +109,44 @@ export default function SettingsModal({
   React.useEffect(() => {
     setDraft(settings);
     setTestResult(null);
+    setProfileName(user?.displayName || "");
+    setProfileChurch(user?.church || "");
+    setInviteDraft(inviteCode || "");
+    setProfileMsg(null);
     if (open) {
       fetchAvailableModels(settings);
     }
-  }, [settings, open, fetchAvailableModels]);
+  }, [settings, open, user?.id, inviteCode, fetchAvailableModels]);
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    setProfileMsg(null);
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: profileName,
+          church: profileChurch,
+          ...(user.role === "admin" ? { inviteCode: inviteDraft } : {}),
+        }),
+      });
+      const data = (await res.json()) as {
+        user?: UserProfile;
+        inviteCode?: string;
+        error?: string;
+      };
+      if (res.ok && data.user) {
+        onProfileUpdated?.(data.user, data.inviteCode);
+        setProfileMsg("Profile saved!");
+      } else {
+        setProfileMsg(data.error || "Could not update profile.");
+      }
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -229,6 +283,111 @@ export default function SettingsModal({
         </div>
 
         <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          {/* User Profile & Admin Members */}
+          {user && (
+            <div className="rounded-2xl bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div
+                    className="h-9 w-9 rounded-full text-white font-semibold text-sm flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: user.avatarColor || "#9A6B24" }}
+                  >
+                    {user.displayName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate flex items-center gap-1.5">
+                      {user.displayName}
+                      {user.role === "admin" && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-[#F7EAD0] dark:bg-[#3A2D1B] text-[#7B531A] dark:text-[#DFB164] text-[10px] font-bold">
+                          Owner
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-[#6B635B] dark:text-[#A39A90] truncate">
+                      {user.email}
+                    </p>
+                  </div>
+                </div>
+                {onSignOut && (
+                  <button
+                    type="button"
+                    onClick={onSignOut}
+                    className="px-3 py-1.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-medium text-rose-700 dark:text-rose-400 inline-flex items-center gap-1.5 transition"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Sign Out
+                  </button>
+                )}
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Display name"
+                  className="rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+                />
+                <input
+                  type="text"
+                  value={profileChurch}
+                  onChange={(e) => setProfileChurch(e.target.value)}
+                  placeholder="Church / Small Group"
+                  className="rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+                />
+              </div>
+
+              {user.role === "admin" && (
+                <div className="pt-2 border-t border-[#E6DCCB] dark:border-[#2A2520] space-y-2">
+                  <label className="text-xs font-semibold flex items-center gap-1.5 text-[#574F47] dark:text-[#CFC5B9]">
+                    <Users className="w-3.5 h-3.5 text-[#9A6B24]" />
+                    Sign-Up Access ({members.length} registered{" "}
+                    {members.length === 1 ? "profile" : "profiles"})
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteDraft}
+                    onChange={(e) => setInviteDraft(e.target.value)}
+                    placeholder="Optional Invite Code (leave blank for open sign-up)"
+                    className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+                  />
+                  {members.length > 0 && (
+                    <div className="max-h-24 overflow-y-auto space-y-1 pt-1">
+                      {members.map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between text-[11px] text-[#6B635B] dark:text-[#A39A90]"
+                        >
+                          <span className="truncate font-medium text-[#1C1917] dark:text-[#EAE3D8]">
+                            {m.displayName} ({m.email})
+                          </span>
+                          <span className="shrink-0 ml-2">
+                            {new Date(m.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                  {profileMsg || ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={savingProfile}
+                  className="px-3 py-1.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1.5 transition"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  {savingProfile ? "Saving..." : "Save Profile"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* API Key */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

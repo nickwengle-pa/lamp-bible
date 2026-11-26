@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { callGemini, GeminiPart, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { createNote } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth";
 import { StudyNote } from "@/lib/types";
 
 interface YouTubeMeta {
@@ -260,7 +261,8 @@ ${promptSchema}`;
       transcript: transcript || undefined,
     };
 
-    const saved = await createNote(note);
+    const user = await getSessionUser(request);
+    const saved = await createNote(note, user?.id);
     return NextResponse.json({ note: saved }, { status: 201 });
   } catch (err) {
     const message =

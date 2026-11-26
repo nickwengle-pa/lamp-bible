@@ -7,9 +7,17 @@ interface VesselKV {
   delete?(key: string): Promise<void>;
 }
 
-const NOTES_KV_KEY = "vessel_library_notes_v1";
-const HIGHLIGHTS_KV_KEY = "vessel_bible_highlights_v1";
+const LEGACY_NOTES_KV_KEY = "vessel_library_notes_v1";
+const LEGACY_HIGHLIGHTS_KV_KEY = "vessel_bible_highlights_v1";
 const PIN_KV_KEY = "vessel_privacy_pin_hash_v1";
+
+function notesKey(userId?: string): string {
+  return userId ? `lamp_user_${userId}_notes_v1` : LEGACY_NOTES_KV_KEY;
+}
+
+function highlightsKey(userId?: string): string {
+  return userId ? `lamp_user_${userId}_highlights_v1` : LEGACY_HIGHLIGHTS_KV_KEY;
+}
 
 const STARTER_NOTES: StudyNote[] = [
   {
@@ -79,24 +87,51 @@ const STARTER_NOTES: StudyNote[] = [
       "Could a current frustration or limitation actually be a season of gentle pruning?",
     ],
     personalNotes:
-      "Tip: Your notes sync automatically via Cloudflare KV! You can edit these reflections, check off takeaways, or delete this sample note anytime.",
+      "Tip: Your notes sync privately to your profile across all your devices! You can edit these reflections, check off takeaways, or delete this sample note anytime.",
   },
 ];
 
-// Fallback in-memory array only if KV binding is unavailable
-let memoryNotes: StudyNote[] | null = null;
+// Fallback in-memory maps only if KV binding is unavailable
+const memoryNotesByKey = new Map<string, StudyNote[]>();
+const memoryHighlightsByKey = new Map<string, Record<string, VerseHighlight>>();
 
 function getKv(): VesselKV | null {
   const cfEnv = env as unknown as { VESSEL_NOTES?: VesselKV };
   return cfEnv?.VESSEL_NOTES ?? null;
 }
 
-async function readNotes(): Promise<StudyNote[]> {
+/**
+ * Copies any existing single-user notes & highlights into the first admin account
+ * so zero existing data is lost when multi-user profiles activate.
+ */
+export async function migrateLegacyDataToUser(userId: string): Promise<void> {
+  const kv = getKv();
+  if (!kv) return;
+
+  const existingUserNotes = await kv.get(notesKey(userId));
+  if (!existingUserNotes) {
+    const legacyNotes = await kv.get(LEGACY_NOTES_KV_KEY);
+    if (legacyNotes) {
+      await kv.put(notesKey(userId), legacyNotes);
+    }
+  }
+
+  const existingUserHl = await kv.get(highlightsKey(userId));
+  if (!existingUserHl) {
+    const legacyHl = await kv.get(LEGACY_HIGHLIGHTS_KV_KEY);
+    if (legacyHl) {
+      await kv.put(highlightsKey(userId), legacyHl);
+    }
+  }
+}
+
+async function readNotes(userId?: string): Promise<StudyNote[]> {
+  const key = notesKey(userId);
   const kv = getKv();
   if (kv) {
-    const raw = await kv.get(NOTES_KV_KEY);
+    const raw = await kv.get(key);
     if (!raw) {
-      await kv.put(NOTES_KV_KEY, JSON.stringify(STARTER_NOTES));
+      await kv.put(key, JSON.stringify(STARTER_NOTES));
       return [...STARTER_NOTES];
     }
     try {
@@ -106,23 +141,24 @@ async function readNotes(): Promise<StudyNote[]> {
     }
   }
 
-  if (!memoryNotes) {
-    memoryNotes = [...STARTER_NOTES];
+  if (!memoryNotesByKey.has(key)) {
+    memoryNotesByKey.set(key, [...STARTER_NOTES]);
   }
-  return [...memoryNotes];
+  return [...(memoryNotesByKey.get(key) || STARTER_NOTES)];
 }
 
-async function writeNotes(notes: StudyNote[]): Promise<void> {
+async function writeNotes(notes: StudyNote[], userId?: string): Promise<void> {
+  const key = notesKey(userId);
   const kv = getKv();
   if (kv) {
-    await kv.put(NOTES_KV_KEY, JSON.stringify(notes));
+    await kv.put(key, JSON.stringify(notes));
     return;
   }
-  memoryNotes = [...notes];
+  memoryNotesByKey.set(key, [...notes]);
 }
 
-export async function getAllNotes(): Promise<StudyNote[]> {
-  const notes = await readNotes();
+export async function getAllNotes(userId?: string): Promise<StudyNote[]> {
+  const notes = await readNotes(userId);
   return notes.sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
@@ -130,23 +166,30 @@ export async function getAllNotes(): Promise<StudyNote[]> {
   });
 }
 
-export async function getNoteById(id: string): Promise<StudyNote | undefined> {
-  const notes = await readNotes();
+export async function getNoteById(
+  id: string,
+  userId?: string
+): Promise<StudyNote | undefined> {
+  const notes = await readNotes(userId);
   return notes.find((n) => n.id === id);
 }
 
-export async function createNote(note: StudyNote): Promise<StudyNote> {
-  const notes = await readNotes();
+export async function createNote(
+  note: StudyNote,
+  userId?: string
+): Promise<StudyNote> {
+  const notes = await readNotes(userId);
   notes.unshift(note);
-  await writeNotes(notes);
+  await writeNotes(notes, userId);
   return note;
 }
 
 export async function updateNote(
   id: string,
-  updates: Partial<StudyNote>
+  updates: Partial<StudyNote>,
+  userId?: string
 ): Promise<StudyNote | null> {
-  const notes = await readNotes();
+  const notes = await readNotes(userId);
   const idx = notes.findIndex((n) => n.id === id);
   if (idx === -1) return null;
   notes[idx] = {
@@ -155,25 +198,29 @@ export async function updateNote(
     id: notes[idx].id,
     updatedAt: new Date().toISOString(),
   };
-  await writeNotes(notes);
+  await writeNotes(notes, userId);
   return notes[idx];
 }
 
-export async function deleteNote(id: string): Promise<boolean> {
-  const notes = await readNotes();
+export async function deleteNote(
+  id: string,
+  userId?: string
+): Promise<boolean> {
+  const notes = await readNotes(userId);
   const filtered = notes.filter((n) => n.id !== id);
   if (filtered.length === notes.length) return false;
-  await writeNotes(filtered);
+  await writeNotes(filtered, userId);
   return true;
 }
 
-// --- Bible Highlights & Margin Notes ---
-let memoryHighlights: Record<string, VerseHighlight> = {};
-
-export async function getAllHighlights(): Promise<Record<string, VerseHighlight>> {
+// --- Bible Highlights & Margin Notes (per user) ---
+export async function getAllHighlights(
+  userId?: string
+): Promise<Record<string, VerseHighlight>> {
+  const key = highlightsKey(userId);
   const kv = getKv();
   if (kv) {
-    const raw = await kv.get(HIGHLIGHTS_KV_KEY);
+    const raw = await kv.get(key);
     if (!raw) return {};
     try {
       return JSON.parse(raw) as Record<string, VerseHighlight>;
@@ -181,38 +228,42 @@ export async function getAllHighlights(): Promise<Record<string, VerseHighlight>
       return {};
     }
   }
-  return { ...memoryHighlights };
+  return { ...(memoryHighlightsByKey.get(key) || {}) };
 }
 
 export async function upsertHighlight(
-  highlight: VerseHighlight
+  highlight: VerseHighlight,
+  userId?: string
 ): Promise<Record<string, VerseHighlight>> {
-  const all = await getAllHighlights();
+  const key = highlightsKey(userId);
+  const all = await getAllHighlights(userId);
   all[highlight.key] = highlight;
   const kv = getKv();
   if (kv) {
-    await kv.put(HIGHLIGHTS_KV_KEY, JSON.stringify(all));
+    await kv.put(key, JSON.stringify(all));
   } else {
-    memoryHighlights = all;
+    memoryHighlightsByKey.set(key, all);
   }
   return all;
 }
 
 export async function deleteHighlight(
-  key: string
+  highlightKey: string,
+  userId?: string
 ): Promise<Record<string, VerseHighlight>> {
-  const all = await getAllHighlights();
-  delete all[key];
+  const key = highlightsKey(userId);
+  const all = await getAllHighlights(userId);
+  delete all[highlightKey];
   const kv = getKv();
   if (kv) {
-    await kv.put(HIGHLIGHTS_KV_KEY, JSON.stringify(all));
+    await kv.put(key, JSON.stringify(all));
   } else {
-    memoryHighlights = all;
+    memoryHighlightsByKey.set(key, all);
   }
   return all;
 }
 
-// --- Optional Privacy PIN Lock ---
+// --- Optional Legacy Privacy PIN Lock ---
 let memoryPinHash: string | null = null;
 
 export async function getPinHash(): Promise<string | null> {

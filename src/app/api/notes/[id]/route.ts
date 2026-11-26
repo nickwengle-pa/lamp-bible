@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { deleteNote, getNoteById, updateNote } from "@/lib/storage";
+import { getSessionUser } from "@/lib/auth";
 import { StudyNote } from "@/lib/types";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getSessionUser(request);
     const { id } = await context.params;
-    const note = await getNoteById(id);
+    const note = await getNoteById(id, user?.id);
     if (!note) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
@@ -24,9 +26,10 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getSessionUser(request);
     const { id } = await context.params;
     const updates = (await request.json()) as Partial<StudyNote>;
-    const updated = await updateNote(id, updates);
+    const updated = await updateNote(id, updates, user?.id);
     if (!updated) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
@@ -38,12 +41,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await getSessionUser(request);
     const { id } = await context.params;
-    const ok = await deleteNote(id);
+    const ok = await deleteNote(id, user?.id);
     if (!ok) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
