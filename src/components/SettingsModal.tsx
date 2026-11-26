@@ -23,6 +23,10 @@ interface SettingsModalProps {
   settings: AppSettings;
   onUpdateSettings: (next: AppSettings) => void;
   notes: StudyNote[];
+  serverConfig?: {
+    hasServerGeminiKey: boolean;
+    hasServerEsvKey: boolean;
+  };
 }
 
 const GEMINI_MODELS = [
@@ -37,6 +41,7 @@ export default function SettingsModal({
   settings,
   onUpdateSettings,
   notes,
+  serverConfig,
 }: SettingsModalProps) {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [testing, setTesting] = useState(false);
@@ -130,6 +135,11 @@ export default function SettingsModal({
               <label className="text-sm font-medium flex items-center gap-1.5">
                 <KeyRound className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
                 Google Gemini API Key
+                {serverConfig?.hasServerGeminiKey && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                    Set on Cloudflare
+                  </span>
+                )}
               </label>
               <a
                 href="https://aistudio.google.com/apikey"
@@ -212,7 +222,12 @@ export default function SettingsModal({
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium flex items-center gap-1.5">
                 <KeyRound className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
-                ESV Bible API Token (Optional)
+                ESV Bible API Token
+                {serverConfig?.hasServerEsvKey && (
+                  <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                    Set on Cloudflare
+                  </span>
+                )}
               </label>
               <a
                 href="https://api.esv.org/"

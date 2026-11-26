@@ -46,6 +46,10 @@ export default function VesselApp() {
   const [notes, setNotes] = useState<StudyNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [serverConfig, setServerConfig] = useState<{
+    hasServerGeminiKey: boolean;
+    hasServerEsvKey: boolean;
+  }>({ hasServerGeminiKey: false, hasServerEsvKey: false });
 
   // Bible target state (enables clicking any scripture chip in Library/Scan -> jumps straight to verse!)
   const [bibleTarget, setBibleTarget] = useState<{
@@ -89,6 +93,12 @@ export default function VesselApp() {
 
   useEffect(() => {
     fetchNotes();
+    fetch("/api/config-status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) setServerConfig(data);
+      })
+      .catch(() => {});
   }, [fetchNotes]);
 
   const handleNoteCreated = (note: StudyNote) => {
@@ -143,7 +153,8 @@ export default function VesselApp() {
     setActiveTab("bible");
   };
 
-  const hasApiKey = Boolean(settings.geminiApiKey.trim());
+  const hasApiKey =
+    Boolean(settings.geminiApiKey.trim()) || serverConfig.hasServerGeminiKey;
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -370,6 +381,7 @@ export default function VesselApp() {
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
         notes={notes}
+        serverConfig={serverConfig}
       />
     </div>
   );
