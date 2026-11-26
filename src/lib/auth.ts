@@ -18,6 +18,7 @@ interface VesselKV {
 interface StoredUser extends UserProfile {
   passwordHash: string;
   passwordSalt: string;
+  googleSub?: string;
 }
 
 interface AuthSettings {
@@ -112,6 +113,16 @@ async function getSigningSecret(): Promise<string> {
 
 export function getConfiguredOwnerSetupKey(): string | null {
   return getEnvVar("OWNER_SETUP_KEY") || getEnvVar("ADMIN_SETUP_KEY") || null;
+}
+
+export function getGoogleOAuthConfig(): {
+  clientId: string;
+  clientSecret: string;
+} | null {
+  const clientId = getEnvVar("GOOGLE_CLIENT_ID");
+  const clientSecret = getEnvVar("GOOGLE_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
+  return { clientId, clientSecret };
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -431,12 +442,143 @@ export async function authenticateUser(
     throw new Error("No account found with that email.");
   }
 
+  if (!found.passwordHash || !found.passwordSalt) {
+    throw new Error(
+      "This account uses Google Sign-In. Click 'Continue with Google' to sign in."
+    );
+  }
+
   const candidateHash = await hashPassword(password, found.passwordSalt);
   if (!timingSafeEqual(candidateHash, found.passwordHash)) {
     throw new Error("Incorrect password. Please try again.");
   }
 
   return stripSecrets(found);
+}
+
+export async function authenticateOrRegisterGoogleUser(input: {
+  email: string;
+  displayName: string;
+  googleSub: string;
+  inviteCode?: string;
+  ownerSetupKey?: string;
+}): Promise<{ user: UserProfile; isFirstUser: boolean }> {
+  const email = input.email.trim().toLowerCase();
+  const displayName =
+    input.displayName.trim() || email.split("@")[0] || "Lamp Member";
+
+  if (!email || !email.includes("@")) {
+    throw new Error("Google did not return a valid verified email address.");
+  }
+
+  return withSerializedWrite("auth:users", async () => {
+    const users = await readUsers();
+    const existingIdx = users.findIndex(
+      (u) => u.googleSub === input.googleSub || u.email === email
+    );
+
+    if (existingIdx !== -1) {
+      const existing = users[existingIdx];
+      if (!existing.googleSub) {
+        const linked: StoredUser = { ...existing, googleSub: input.googleSub };
+        users[existingIdx] = linked;
+        await saveSingleUser(linked, users);
+        return { user: stripSecrets(linked), isFirstUser: false };
+      }
+      return { user: stripSecrets(existing), isFirstUser: false };
+    }
+
+    const isFirstUser = users.length === 0;
+    if (isFirstUser) {
+      const configuredSetupKey = getConfiguredOwnerSetupKey();
+      const kv = getKv();
+      const hasLegacyData = kv
+        ? Boolean(
+            (await kv.get("vessel_library_notes_v1")) ||
+              (await kv.get("vessel_bible_highlights_v1"))
+          )
+        : false;
+
+      if (configuredSetupKey) {
+        const supplied = (input.ownerSetupKey || "").trim();
+        if (!supplied || !timingSafeEqual(supplied, configuredSetupKey)) {
+          throw new Error(
+            "Valid Owner Setup Key is required to initialize the first administrator account."
+          );
+        }
+      } else if (hasLegacyData) {
+        throw new Error(
+          "Existing library data detected. Configure OWNER_SETUP_KEY before claiming the initial Owner account."
+        );
+      }
+    } else {
+      const settings = await getAuthSettings();
+      if (
+        settings.inviteCode &&
+        !timingSafeEqual(
+          (input.inviteCode || "").trim().toLowerCase(),
+          settings.inviteCode.trim().toLowerCase()
+        )
+      ) {
+        throw new Error(
+          "An invite code is required to join. Enter the invite code before clicking Continue with Google."
+        );
+      }
+    }
+
+    const created: StoredUser = {
+      id: crypto.randomUUID(),
+      email,
+      displayName,
+      role: isFirstUser ? "admin" : "member",
+      avatarColor: AVATAR_COLORS[users.length % AVATAR_COLORS.length],
+      createdAt: new Date().toISOString(),
+      passwordHash: "",
+      passwordSalt: "",
+      googleSub: input.googleSub,
+    };
+
+    const nextUsers = [...users, created];
+    await saveSingleUser(created, nextUsers);
+    return { user: stripSecrets(created), isFirstUser };
+  });
+}
+
+export async function deleteMemberUser(
+  targetUserId: string,
+  actingAdminId: string
+): Promise<boolean> {
+  if (targetUserId === actingAdminId) {
+    throw new Error("You cannot remove your own Owner account.");
+  }
+
+  return withSerializedWrite("auth:users", async () => {
+    const users = await readUsers();
+    const target = users.find((u) => u.id === targetUserId);
+    if (!target) return false;
+    if (target.role === "admin") {
+      throw new Error("Owner accounts cannot be removed here.");
+    }
+
+    const kv = getKv();
+    if (kv && kv.list) {
+      const key = `${USER_REC_PREFIX}${targetUserId}`;
+      if (kv.delete) {
+        await kv.delete(key);
+      } else {
+        await kv.put(key, "");
+      }
+      return true;
+    }
+
+    const filtered = users.filter((u) => u.id !== targetUserId);
+    if (kv) {
+      await kv.put(USERS_KV_KEY, JSON.stringify(filtered));
+    } else {
+      memoryUsers = filtered;
+    }
+    return true;
+  });
 }
 
 export async function updateUserProfile(

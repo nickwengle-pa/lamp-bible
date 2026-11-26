@@ -85,6 +85,7 @@ export default function VesselApp() {
   const [userCount, setUserCount] = useState(0);
   const [inviteRequired, setInviteRequired] = useState(false);
   const [ownerSetupRequired, setOwnerSetupRequired] = useState(false);
+  const [googleAuthEnabled, setGoogleAuthEnabled] = useState(false);
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [inviteCode, setInviteCode] = useState("");
   const [theologyNotes, setTheologyNotes] = useState("");
@@ -132,6 +133,7 @@ export default function VesselApp() {
           userCount: number;
           inviteRequired: boolean;
           ownerSetupRequired?: boolean;
+          googleAuthEnabled?: boolean;
           members?: UserProfile[];
           inviteCode?: string;
           theologyNotes?: string;
@@ -140,6 +142,7 @@ export default function VesselApp() {
         setUserCount(data.userCount || 0);
         setInviteRequired(Boolean(data.inviteRequired));
         setOwnerSetupRequired(Boolean(data.ownerSetupRequired));
+        setGoogleAuthEnabled(Boolean(data.googleAuthEnabled));
         setMembers(data.members || []);
         setInviteCode(data.inviteCode || "");
         setTheologyNotes(data.theologyNotes || "");
@@ -366,6 +369,7 @@ export default function VesselApp() {
         userCount={userCount}
         inviteRequired={inviteRequired}
         ownerSetupRequired={ownerSetupRequired}
+        googleAuthEnabled={googleAuthEnabled}
         onAuthenticated={(signedInUser) => {
           setUser(signedInUser);
           refreshAuth();
@@ -811,12 +815,14 @@ export default function VesselApp() {
         members={members}
         inviteCode={inviteCode}
         theologyNotes={theologyNotes}
+        googleAuthEnabled={googleAuthEnabled}
         onProfileUpdated={(updatedUser, nextInvite, nextTheology) => {
           setUser(updatedUser);
           if (nextInvite !== undefined) setInviteCode(nextInvite);
           if (nextTheology !== undefined) setTheologyNotes(nextTheology);
           refreshAuth();
         }}
+        onMembersChanged={(nextMembers) => setMembers(nextMembers)}
         onSignOut={handleSignOut}
         serverConfig={serverConfig}
       />

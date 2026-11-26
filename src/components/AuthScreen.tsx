@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Mail, Lock, User, Church, Ticket, Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { UserProfile } from "@/lib/types";
 import { LampTitleLockup } from "./LampBrand";
@@ -9,6 +9,7 @@ interface AuthScreenProps {
   userCount: number;
   inviteRequired: boolean;
   ownerSetupRequired?: boolean;
+  googleAuthEnabled?: boolean;
   onAuthenticated: (user: UserProfile) => void;
 }
 
@@ -16,6 +17,7 @@ export default function AuthScreen({
   userCount,
   inviteRequired,
   ownerSetupRequired = false,
+  googleAuthEnabled = false,
   onAuthenticated,
 }: AuthScreenProps) {
   const [mode, setMode] = useState<"login" | "signup">(
@@ -29,6 +31,28 @@ export default function AuthScreen({
   const [ownerSetupKey, setOwnerSetupKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const authErr = params.get("authError");
+    if (authErr) {
+      setError(authErr);
+      params.delete("authError");
+      const nextSearch = params.toString();
+      const nextUrl =
+        window.location.pathname + (nextSearch ? `?${nextSearch}` : "");
+      window.history.replaceState({}, "", nextUrl);
+    }
+  }, []);
+
+  const handleGoogleSignIn = () => {
+    const params = new URLSearchParams();
+    if (inviteCode.trim()) params.set("inviteCode", inviteCode.trim());
+    if (ownerSetupKey.trim()) params.set("ownerSetupKey", ownerSetupKey.trim());
+    const qs = params.toString();
+    window.location.href = `/api/auth/google${qs ? `?${qs}` : ""}`;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +146,42 @@ export default function AuthScreen({
           <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-3 text-xs text-rose-700 dark:text-rose-200 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
+          </div>
+        )}
+
+        {googleAuthEnabled && (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full py-2.5 px-4 rounded-2xl bg-white dark:bg-[#141210] border border-[#DFD5C5] dark:border-[#36302A] hover:border-[#9A6B24] text-[#1C1917] dark:text-[#F5F0E8] font-semibold text-sm shadow-sm inline-flex items-center justify-center gap-2.5 transition"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="#4285F4"
+                  d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.3h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.87c2.26-2.08 3.56-5.15 3.56-8.65z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.07 7.93-2.9l-3.87-3c-1.07.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.95H1.29v3.1A12 12 0 0 0 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.29 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.29a12 12 0 0 0 0 10.8l4-3.1z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.29 6.6l4 3.1c.94-2.84 3.59-4.95 6.71-4.95z"
+                />
+              </svg>
+              Continue with Google
+            </button>
+
+            <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-[#8C8278]">
+              <span className="h-px flex-1 bg-[#E6DCCB] dark:bg-[#2F2A24]" />
+              <span>or with email</span>
+              <span className="h-px flex-1 bg-[#E6DCCB] dark:bg-[#2F2A24]" />
+            </div>
           </div>
         )}
 

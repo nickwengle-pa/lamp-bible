@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  deleteMemberUser,
   getAuthSettings,
   getConfiguredOwnerSetupKey,
+  getGoogleOAuthConfig,
   getSessionUser,
   getUserCount,
   listAllProfiles,
@@ -26,6 +28,7 @@ export async function GET(request: Request) {
       userCount,
       inviteRequired: userCount > 0 && Boolean(authSettings.inviteCode),
       ownerSetupRequired: userCount === 0 && Boolean(getConfiguredOwnerSetupKey()),
+      googleAuthEnabled: Boolean(getGoogleOAuthConfig()),
     };
 
     if (user?.role === "admin") {
@@ -92,5 +95,35 @@ export async function PATCH(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Profile update failed";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const user = await getSessionUser(request);
+    if (!user || user.role !== "admin") {
+      return NextResponse.json(
+        { error: "Owner permission required." },
+        { status: 403 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const memberId = searchParams.get("memberId")?.trim();
+    if (!memberId) {
+      return NextResponse.json({ error: "Missing memberId." }, { status: 400 });
+    }
+
+    const removed = await deleteMemberUser(memberId, user.id);
+    if (!removed) {
+      return NextResponse.json({ error: "Member not found." }, { status: 404 });
+    }
+
+    const members = await listAllProfiles();
+    return NextResponse.json({ ok: true, members });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Could not remove member.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 }

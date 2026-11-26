@@ -16,6 +16,7 @@ import {
   Users,
   LogOut,
   BookOpen,
+  Trash2,
 } from "lucide-react";
 import { AppSettings, StudyNote, UserProfile } from "@/lib/types";
 import { BIBLE_TRANSLATIONS } from "@/lib/bible-books";
@@ -31,11 +32,13 @@ interface SettingsModalProps {
   members?: UserProfile[];
   inviteCode?: string;
   theologyNotes?: string;
+  googleAuthEnabled?: boolean;
   onProfileUpdated?: (
     user: UserProfile,
     nextInviteCode?: string,
     nextTheologyNotes?: string
   ) => void;
+  onMembersChanged?: (members: UserProfile[]) => void;
   onSignOut?: () => void;
   serverConfig?: {
     hasServerGeminiKey: boolean;
@@ -60,7 +63,9 @@ export default function SettingsModal({
   members = [],
   inviteCode = "",
   theologyNotes = "",
+  googleAuthEnabled = false,
   onProfileUpdated,
+  onMembersChanged,
   onSignOut,
   serverConfig,
 }: SettingsModalProps) {
@@ -82,6 +87,7 @@ export default function SettingsModal({
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
   const [savingTheology, setSavingTheology] = useState(false);
   const [theologyMsg, setTheologyMsg] = useState<string | null>(null);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
 
   const fetchAvailableModels = React.useCallback(async (cfg: AppSettings) => {
     setLoadingModels(true);
@@ -117,6 +123,38 @@ export default function SettingsModal({
       fetchAvailableModels(settings);
     }
   }, [settings, open, user?.id, inviteCode, theologyNotes, fetchAvailableModels]);
+
+  const handleRemoveMember = async (member: UserProfile) => {
+    if (!user || user.role !== "admin") return;
+    if (
+      !window.confirm(
+        `Remove ${member.displayName} (${member.email})? They will no longer be able to sign in.`
+      )
+    ) {
+      return;
+    }
+    setRemovingMemberId(member.id);
+    setProfileMsg(null);
+    try {
+      const res = await fetch(
+        `/api/auth/me?memberId=${encodeURIComponent(member.id)}`,
+        { method: "DELETE" }
+      );
+      const data = (await res.json()) as {
+        ok?: boolean;
+        members?: UserProfile[];
+        error?: string;
+      };
+      if (res.ok && data.members) {
+        onMembersChanged?.(data.members);
+        setProfileMsg(`Removed ${member.displayName}.`);
+      } else {
+        setProfileMsg(data.error || "Could not remove member.");
+      }
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
 
   const handleSaveTheology = async () => {
     if (!user || user.role !== "admin") return;
@@ -312,12 +350,24 @@ export default function SettingsModal({
               </div>
 
               {user.role === "admin" && (
-                <div className="pt-2 border-t border-[#E6DCCB] dark:border-[#2A2520] space-y-2">
-                  <label className="text-xs font-semibold flex items-center gap-1.5 text-[#574F47] dark:text-[#CFC5B9]">
-                    <Users className="w-3.5 h-3.5 text-[#9A6B24]" />
-                    Sign-Up Access ({members.length} registered{" "}
-                    {members.length === 1 ? "profile" : "profiles"})
-                  </label>
+                <div className="pt-2.5 border-t border-[#E6DCCB] dark:border-[#2A2520] space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <label className="text-xs font-semibold flex items-center gap-1.5 text-[#574F47] dark:text-[#CFC5B9]">
+                      <Users className="w-3.5 h-3.5 text-[#9A6B24]" />
+                      Registered Members ({members.length})
+                    </label>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        googleAuthEnabled
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          : "bg-stone-200/80 text-stone-700 dark:bg-stone-800 dark:text-stone-300"
+                      }`}
+                    >
+                      {googleAuthEnabled
+                        ? "Google Sign-In Active"
+                        : "Google Sign-In Ready (Add OAuth keys)"}
+                    </span>
+                  </div>
                   <input
                     type="text"
                     value={inviteDraft}
@@ -326,18 +376,54 @@ export default function SettingsModal({
                     className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
                   />
                   {members.length > 0 && (
-                    <div className="max-h-24 overflow-y-auto space-y-1 pt-1">
+                    <div className="max-h-40 overflow-y-auto space-y-1.5 pt-1">
                       {members.map((m) => (
                         <div
                           key={m.id}
-                          className="flex items-center justify-between text-[11px] text-[#6B635B] dark:text-[#A39A90]"
+                          className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24]"
                         >
-                          <span className="truncate font-medium text-[#1C1917] dark:text-[#EAE3D8]">
-                            {m.displayName} ({m.email})
-                          </span>
-                          <span className="shrink-0 ml-2">
-                            {new Date(m.createdAt).toLocaleDateString()}
-                          </span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className="h-7 w-7 rounded-full text-white text-[11px] font-semibold flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: m.avatarColor || "#9A6B24" }}
+                            >
+                              {m.displayName.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold truncate text-[#1C1917] dark:text-[#EAE3D8] flex items-center gap-1.5">
+                                <span className="truncate">{m.displayName}</span>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                    m.role === "admin"
+                                      ? "bg-[#F7EAD0] text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
+                                      : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300"
+                                  }`}
+                                >
+                                  {m.role === "admin" ? "Owner" : "Member"}
+                                </span>
+                              </p>
+                              <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+                                {m.email}
+                                {m.church ? ` · ${m.church}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] text-[#8C8278]">
+                              {new Date(m.createdAt).toLocaleDateString()}
+                            </span>
+                            {m.role !== "admin" && m.id !== user.id && (
+                              <button
+                                type="button"
+                                disabled={removingMemberId === m.id}
+                                onClick={() => handleRemoveMember(m)}
+                                title={`Remove ${m.displayName}`}
+                                className="p-1 rounded-lg text-[#8C8278] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition disabled:opacity-40"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
