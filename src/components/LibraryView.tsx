@@ -569,7 +569,7 @@ export default function LibraryView({
           </h1>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden lg:flex flex-wrap gap-2">
           <button
             onClick={() => onQuickNavigate("record")}
             className="px-4 py-2.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-sm font-semibold shadow-sm inline-flex items-center gap-2 transition"
@@ -723,17 +723,17 @@ export default function LibraryView({
             className="w-24 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-[#FAF7F2] dark:bg-[#141210] px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
           />
 
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto sm:ml-auto">
             <button
               type="button"
               onClick={() => setSearch(buildJumpReference())}
-              className="px-3 py-1.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] hover:bg-[#F2ECE1] dark:hover:bg-[#2A2520] text-xs font-medium transition"
+              className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] hover:bg-[#F2ECE1] dark:hover:bg-[#2A2520] text-xs font-medium transition"
             >
               Filter Notes
             </button>
             <button
               type="submit"
-              className="px-3.5 py-1.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-xs font-semibold inline-flex items-center gap-1.5 transition"
+              className="flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition"
             >
               <BookOpen className="w-3.5 h-3.5" />
               Read {buildJumpReference()}

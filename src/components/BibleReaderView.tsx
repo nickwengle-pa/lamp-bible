@@ -87,22 +87,22 @@ const HIGHLIGHT_STYLES: Record<
   { bg: string; swatch: string; label: string }
 > = {
   gold: {
-    bg: "bg-amber-200/55 dark:bg-amber-800/35",
+    bg: "bg-amber-200/75 dark:bg-amber-700/45 decoration-clone rounded px-1 py-0.5",
     swatch: "bg-amber-400",
     label: "Gold",
   },
   sage: {
-    bg: "bg-emerald-200/50 dark:bg-emerald-800/35",
+    bg: "bg-emerald-200/70 dark:bg-emerald-700/45 decoration-clone rounded px-1 py-0.5",
     swatch: "bg-emerald-400",
     label: "Sage",
   },
   sky: {
-    bg: "bg-sky-200/50 dark:bg-sky-800/35",
+    bg: "bg-sky-200/70 dark:bg-sky-700/45 decoration-clone rounded px-1 py-0.5",
     swatch: "bg-sky-400",
     label: "Sky",
   },
   rose: {
-    bg: "bg-rose-200/50 dark:bg-rose-800/35",
+    bg: "bg-rose-200/70 dark:bg-rose-700/45 decoration-clone rounded px-1 py-0.5",
     swatch: "bg-rose-400",
     label: "Rose",
   },
@@ -629,7 +629,7 @@ export default function BibleReaderView({
               )}
             </div>
           ) : (
-            <div className="space-y-2 font-serif text-[19px] leading-[1.85] text-[#24201C] dark:text-[#ECE5DA]">
+            <div className="space-y-1.5 font-serif text-[19px] leading-[1.9] text-[#24201C] dark:text-[#ECE5DA]">
               {chapterData?.verses.map((v) => {
                 const isSelected = selectedVerse?.verse === v.verse;
                 const isHighlighted = activeHighlight === v.verse;
@@ -640,20 +640,28 @@ export default function BibleReaderView({
                     key={v.verse}
                     id={`verse-${v.verse}`}
                     onClick={() => handleVerseClick(v)}
-                    className={`w-full text-left px-3 py-2 -mx-3 rounded-xl transition block group ${
+                    className={`w-full text-left px-2.5 py-1.5 -mx-2.5 rounded-xl transition block group ${
                       isSelected
-                        ? "bg-[#F7EAD0]/90 dark:bg-[#3A2D1B]/85 ring-1 ring-[#B88435]/70"
-                        : savedHl
-                        ? HIGHLIGHT_STYLES[savedHl.color].bg
-                        : isHighlighted
-                        ? "bg-[#F7EAD0]/45 dark:bg-[#33281A]/50"
-                        : "hover:bg-[#FAF5EB] dark:hover:bg-[#25211C]"
+                        ? "border-l-2 border-[#9A6B24] bg-[#FAF4E8]/70 dark:bg-[#251E15]/60 pl-3"
+                        : "hover:bg-[#FAF5EB]/70 dark:hover:bg-[#25211C]/60"
                     }`}
                   >
                     <sup className="font-sans text-xs font-bold text-[#9A6B24] dark:text-[#DFB164] mr-2 select-none">
                       {v.verse}
                     </sup>
-                    <span>{v.text.trim()}</span>
+                    <span
+                      className={
+                        savedHl
+                          ? HIGHLIGHT_STYLES[savedHl.color].bg
+                          : isHighlighted
+                          ? "bg-[#F7EAD0]/75 dark:bg-[#3A2D1B]/65 decoration-clone rounded px-1 py-0.5"
+                          : isSelected
+                          ? "underline decoration-[#B88435]/50 decoration-dotted underline-offset-4"
+                          : ""
+                      }
+                    >
+                      {v.text.trim()}
+                    </span>
                     {savedHl?.note && (
                       <span className="mt-1 flex items-center gap-1.5 font-sans text-xs text-[#6B635B] dark:text-[#BDB4AA] italic">
                         <StickyNote className="w-3 h-3 text-[#9A6B24] shrink-0" />
