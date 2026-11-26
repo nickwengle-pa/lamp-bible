@@ -375,7 +375,9 @@ export async function GET(request: Request) {
     const isSingleChapterWholeBook = Boolean(
       parsed && matchedBook?.chapters === 1 && !parsed.verse
     );
-    const queryPassage = isSingleChapterWholeBook ? parsed!.book : passage;
+    const queryPassage = isSingleChapterWholeBook
+      ? `${parsed!.book} 1`
+      : passage;
 
     const url = `https://bible-api.com/${encodeURIComponent(
       queryPassage
