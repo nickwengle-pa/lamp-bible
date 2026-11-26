@@ -12,7 +12,6 @@ import {
   Moon,
   KeyRound,
   CheckCircle2,
-  Lock,
   Languages,
   Menu,
   X,
@@ -34,13 +33,10 @@ import BibleReaderView from "./BibleReaderView";
 import ScriptureScannerView from "./ScriptureScannerView";
 import WordStudyView from "./WordStudyView";
 import SettingsModal from "./SettingsModal";
-import LockScreen from "./LockScreen";
 import AuthScreen from "./AuthScreen";
 import { LampMark, LampTitleLockup } from "./LampBrand";
 
 type ActiveTab = "library" | "words" | "record" | "youtube" | "bible" | "scan";
-
-const UNLOCK_STORAGE_KEY = "vessel_device_unlocked_v1";
 
 const NAV_ITEMS: {
   id: ActiveTab;
@@ -82,11 +78,6 @@ export default function VesselApp() {
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [inviteCode, setInviteCode] = useState("");
 
-  // Privacy Passcode Lock state
-  const [checkingLock, setCheckingLock] = useState(true);
-  const [lockEnabled, setLockEnabled] = useState(false);
-  const [unlocked, setUnlocked] = useState(true);
-
   const [bibleTarget, setBibleTarget] = useState<{
     book: string;
     chapter: number;
@@ -124,26 +115,6 @@ export default function VesselApp() {
   useEffect(() => {
     refreshAuth();
   }, [refreshAuth]);
-
-  // Check if Privacy Passcode Lock is enabled on Cloudflare
-  useEffect(() => {
-    fetch("/api/lock")
-      .then((r) => (r.ok ? r.json() : { enabled: false }))
-      .then((data) => {
-        const enabled = Boolean(data?.enabled);
-        setLockEnabled(enabled);
-        if (enabled) {
-          const remembered =
-            window.localStorage.getItem(UNLOCK_STORAGE_KEY) === "1" ||
-            window.sessionStorage.getItem(UNLOCK_STORAGE_KEY) === "1";
-          setUnlocked(remembered);
-        } else {
-          setUnlocked(true);
-        }
-      })
-      .catch(() => setUnlocked(true))
-      .finally(() => setCheckingLock(false));
-  }, []);
 
   const handleUpdateSettings = (next: AppSettings) => {
     setSettings(next);
@@ -184,10 +155,10 @@ export default function VesselApp() {
   }, []);
 
   useEffect(() => {
-    if (unlocked && user) {
+    if (user) {
       fetchNotesAndHighlights();
     }
-  }, [unlocked, user?.id, fetchNotesAndHighlights]);
+  }, [user?.id, fetchNotesAndHighlights]);
 
   const handleSignOut = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -298,13 +269,7 @@ export default function VesselApp() {
     setActiveTab("library");
   };
 
-  const handleLockNow = () => {
-    window.localStorage.removeItem(UNLOCK_STORAGE_KEY);
-    window.sessionStorage.removeItem(UNLOCK_STORAGE_KEY);
-    setUnlocked(false);
-  };
-
-  if (checkingLock || checkingAuth) {
+  if (checkingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210]">
         <LampMark className="w-12 h-10 text-[#1C1917] dark:text-[#F5F0E8] animate-pulse" />
@@ -320,21 +285,6 @@ export default function VesselApp() {
         onAuthenticated={(signedInUser) => {
           setUser(signedInUser);
           refreshAuth();
-        }}
-      />
-    );
-  }
-
-  if (lockEnabled && !unlocked) {
-    return (
-      <LockScreen
-        onUnlocked={(remember) => {
-          if (remember) {
-            window.localStorage.setItem(UNLOCK_STORAGE_KEY, "1");
-          } else {
-            window.sessionStorage.setItem(UNLOCK_STORAGE_KEY, "1");
-          }
-          setUnlocked(true);
         }}
       />
     );
@@ -469,15 +419,6 @@ export default function VesselApp() {
               <Settings className="w-3.5 h-3.5" />
               Settings
             </button>
-            {lockEnabled && (
-              <button
-                onClick={handleLockNow}
-                title="Lock Lamp"
-                className="p-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-[#6B635B] hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
-              >
-                <Lock className="w-3.5 h-3.5" />
-              </button>
-            )}
           </div>
         </div>
       </aside>
@@ -596,18 +537,6 @@ export default function VesselApp() {
                 <LogOut className="w-3.5 h-3.5" />
                 Sign Out
               </button>
-              {lockEnabled && (
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    handleLockNow();
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-xs font-medium text-[#6B635B] dark:text-[#A39A90]"
-                >
-                  <Lock className="w-4 h-4" />
-                  Lock Lamp
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -757,13 +686,6 @@ export default function VesselApp() {
         }}
         onSignOut={handleSignOut}
         serverConfig={serverConfig}
-        lockEnabled={lockEnabled}
-        onLockChanged={(enabled) => {
-          setLockEnabled(enabled);
-          if (enabled) {
-            window.localStorage.setItem(UNLOCK_STORAGE_KEY, "1");
-          }
-        }}
       />
     </div>
   );
