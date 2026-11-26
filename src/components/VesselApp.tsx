@@ -712,12 +712,12 @@ export default function VesselApp() {
               />
 
               {!selectedNoteId && configLoaded && (
-                <section className="max-w-5xl mx-auto mt-4 pt-8 border-t border-[#E6DCCB] dark:border-[#2A2520] pb-16">
-                  <div className="mb-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
+                <section className="max-w-5xl mx-auto mt-2 sm:mt-4 pt-4 sm:pt-8 border-t border-[#E6DCCB] dark:border-[#2A2520] pb-16">
+                  <div className="mb-3 sm:mb-4">
+                    <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
                       Daily Scripture Reading
                     </p>
-                    <h2 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight mt-0.5">
+                    <h2 className="font-serif text-xl sm:text-3xl font-semibold tracking-tight mt-0.5">
                       Bible Reader
                     </h2>
                   </div>

@@ -22,6 +22,8 @@ import {
   ChevronUp,
   Plus,
   FolderOpen,
+  Languages,
+  ChevronRight,
 } from "lucide-react";
 import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
 import { formatDuration, noteToMarkdown } from "@/lib/client-api";
@@ -75,6 +77,45 @@ const SOURCE_META: Record<
   },
 };
 
+type LibrarySection =
+  | "all"
+  | "word"
+  | "verse"
+  | "sermon"
+  | "youtube"
+  | "scan"
+  | "manual";
+
+function isWordStudyNote(note: StudyNote): boolean {
+  return (
+    Boolean(note.series?.toLowerCase().includes("word")) ||
+    note.tags.some((t) => t.toLowerCase().includes("word study")) ||
+    note.title.toLowerCase().startsWith("word study")
+  );
+}
+
+function matchesLibrarySection(note: StudyNote, section: LibrarySection): boolean {
+  if (section === "all") return true;
+  if (section === "word") return isWordStudyNote(note);
+  if (section === "verse") return note.sourceType === "verse" && !isWordStudyNote(note);
+  return note.sourceType === section;
+}
+
+const SECTION_TABS: {
+  id: LibrarySection;
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: "all", label: "All", shortLabel: "All", icon: FolderOpen },
+  { id: "word", label: "Word Study", shortLabel: "Word", icon: Languages },
+  { id: "verse", label: "Verse Study", shortLabel: "Verse", icon: BookOpen },
+  { id: "sermon", label: "Sermon", shortLabel: "Sermon", icon: Mic },
+  { id: "youtube", label: "YouTube", shortLabel: "YouTube", icon: Youtube },
+  { id: "scan", label: "Scan", shortLabel: "Scan", icon: Camera },
+  { id: "manual", label: "Guides & Notes", shortLabel: "Guides", icon: FileText },
+];
+
 export default function LibraryView({
   settings,
   notes,
@@ -87,8 +128,10 @@ export default function LibraryView({
   onQuickNavigate,
 }: LibraryViewProps) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | NoteSourceType>("all");
+  const [filter, setFilter] = useState<LibrarySection>("all");
   const [seriesFilter, setSeriesFilter] = useState<string>("all");
+  const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false);
   const [jumpBook, setJumpBook] = useState("John");
   const [jumpChapter, setJumpChapter] = useState(1);
   const [jumpVerse, setJumpVerse] = useState("");
@@ -136,9 +179,30 @@ export default function LibraryView({
     }
   }, [selectedNote?.id]);
 
+  const sectionCounts = useMemo(() => {
+    const counts: Record<LibrarySection, number> = {
+      all: notes.length,
+      word: 0,
+      verse: 0,
+      sermon: 0,
+      youtube: 0,
+      scan: 0,
+      manual: 0,
+    };
+    for (const n of notes) {
+      if (isWordStudyNote(n)) counts.word += 1;
+      else if (n.sourceType === "verse") counts.verse += 1;
+      else if (n.sourceType === "sermon") counts.sermon += 1;
+      else if (n.sourceType === "youtube") counts.youtube += 1;
+      else if (n.sourceType === "scan") counts.scan += 1;
+      else counts.manual += 1;
+    }
+    return counts;
+  }, [notes]);
+
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
-      if (filter !== "all" && note.sourceType !== filter) return false;
+      if (!matchesLibrarySection(note, filter)) return false;
       if (seriesFilter !== "all" && (note.series || "") !== seriesFilter)
         return false;
       if (!search.trim()) return true;
@@ -556,18 +620,45 @@ export default function LibraryView({
   }
 
   // Library Index View
+  const hasActiveQuery =
+    Boolean(search.trim()) || filter !== "all" || seriesFilter !== "all";
+  const mobileVisibleNotes =
+    mobileExpanded || hasActiveQuery ? filteredNotes : filteredNotes.slice(0, 2);
+
   return (
-    <div className="max-w-5xl mx-auto pb-6 space-y-6">
+    <div className="max-w-5xl mx-auto pb-3 sm:pb-6 space-y-3 sm:space-y-5">
       {/* Header & Quick Capture Strip */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="hidden sm:block text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
             Your Study Archive
           </p>
-          <h1 className="font-serif text-3xl sm:text-4xl font-semibold tracking-tight mt-1">
-            Scripture & Sermon Library
+          <h1 className="font-serif text-xl sm:text-4xl font-semibold tracking-tight sm:mt-1 flex items-center gap-2">
+            <span>Study Library</span>
+            <span className="sm:hidden px-2 py-0.5 rounded-full bg-[#F2ECE1] dark:bg-[#2A2520] text-[#7B531A] dark:text-[#DFB164] font-sans text-[11px] font-semibold">
+              {notes.length}
+            </span>
           </h1>
         </div>
+
+        {/* Mobile quick expand/collapse toggle */}
+        <button
+          type="button"
+          onClick={() => setMobileExpanded((v) => !v)}
+          className="sm:hidden px-2.5 py-1.5 rounded-xl border border-[#DFD5C5] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] text-[11px] font-semibold text-[#574F47] dark:text-[#CFC5B9] inline-flex items-center gap-1 shrink-0"
+        >
+          {mobileExpanded ? (
+            <>
+              Compact
+              <ChevronUp className="w-3.5 h-3.5" />
+            </>
+          ) : (
+            <>
+              Expand All
+              <ChevronDown className="w-3.5 h-3.5" />
+            </>
+          )}
+        </button>
 
         <div className="hidden lg:flex flex-wrap gap-2">
           <button
@@ -594,37 +685,74 @@ export default function LibraryView({
         </div>
       </div>
 
-      {/* Search, Theme Filter & Quick Book/Chapter/Verse Selector */}
-      <div className="w-full min-w-0 rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-3 sm:p-3.5 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row gap-2.5 min-w-0">
+      {/* Search, Section Tabs & Collapsible Book/Chapter/Verse Selector */}
+      <div className="w-full min-w-0 rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-2.5 sm:p-3.5 shadow-sm space-y-2.5 sm:space-y-3">
+        {/* Top Row: Search + Mobile Scripture Jump Toggle */}
+        <div className="flex items-center gap-2 min-w-0">
           <div className="relative flex-1 min-w-0">
-            <Search className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[#8C8278] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search themes, sermons, or a verse..."
-              className="w-full min-w-0 pl-10 pr-4 py-2.5 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+              placeholder="Search notes, themes, or verse..."
+              className="w-full min-w-0 pl-9 pr-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5 md:pb-0">
-            {(["all", "sermon", "youtube", "scan", "verse"] as const).map((tab) => (
+          <button
+            type="button"
+            onClick={() => setMobileSelectorOpen((v) => !v)}
+            className={`sm:hidden px-2.5 py-2 rounded-xl border text-xs font-semibold inline-flex items-center gap-1 shrink-0 transition ${
+              mobileSelectorOpen
+                ? "border-[#9A6B24] bg-[#FAF4E8] text-[#7B531A] dark:bg-[#33281A] dark:text-[#DFB164]"
+                : "border-[#DFD5C5] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] text-[#574F47] dark:text-[#CFC5B9]"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164]" />
+            <span>Jump</span>
+            {mobileSelectorOpen ? (
+              <ChevronUp className="w-3 h-3" />
+            ) : (
+              <ChevronDown className="w-3 h-3" />
+            )}
+          </button>
+        </div>
+
+        {/* Section Filter Pills: All · Word · Verse · Sermon · YouTube · Scan · Guides */}
+        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5">
+          {SECTION_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const count = sectionCounts[tab.id];
+            const active = filter === tab.id;
+            return (
               <button
-                key={tab}
-                onClick={() => setFilter(tab)}
-                className={`px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 transition ${
-                  filter === tab
+                key={tab.id}
+                type="button"
+                onClick={() => setFilter(tab.id)}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-medium whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 transition ${
+                  active
                     ? "bg-[#1C1917] text-[#FAF7F2] dark:bg-[#DFB164] dark:text-[#141210]"
                     : "bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90] hover:border-[#B88435]"
                 }`}
               >
-                {tab === "all"
-                  ? `All (${notes.length})`
-                  : SOURCE_META[tab].label}
+                <Icon className="w-3 h-3 shrink-0" />
+                <span className="sm:hidden">{tab.shortLabel}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+                {count > 0 && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      active
+                        ? "bg-white/20 dark:bg-black/15"
+                        : "bg-[#ECE4D6] dark:bg-[#2A2520]"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
         {/* Smart Passage Jump Chip when typing a Bible reference in Search */}
@@ -654,13 +782,15 @@ export default function LibraryView({
           </div>
         )}
 
-        {/* Compact Book, Chapter & Verse Selector Row */}
+        {/* Compact Book, Chapter & Verse Selector Row (collapsible on phone, always shown on tablet/desktop) */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             onOpenScripture(buildJumpReference());
           }}
-          className="pt-2.5 border-t border-[#EFE8DC] dark:border-[#2A2520] flex flex-wrap items-center gap-2 min-w-0"
+          className={`${
+            mobileSelectorOpen ? "flex" : "hidden sm:flex"
+          } pt-2.5 border-t border-[#EFE8DC] dark:border-[#2A2520] flex-wrap items-center gap-2 min-w-0`}
         >
           <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] inline-flex items-center gap-1.5 mr-1 w-full sm:w-auto">
             <BookOpen className="w-3.5 h-3.5" />
@@ -744,28 +874,28 @@ export default function LibraryView({
         </form>
       </div>
 
-      {/* Series / Folders Filter Strip */}
+      {/* Series / Folders Filter Strip (compact slim pills) */}
       {allSeries.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] inline-flex items-center gap-1 shrink-0">
-            <FolderOpen className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164]" />
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+          <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] inline-flex items-center gap-1 shrink-0">
+            <FolderOpen className="w-3 h-3 text-[#9A6B24] dark:text-[#DFB164]" />
             Series:
           </span>
           <button
             onClick={() => setSeriesFilter("all")}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+            className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-medium whitespace-nowrap shrink-0 transition ${
               seriesFilter === "all"
                 ? "bg-[#9A6B24] text-white"
                 : "bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90]"
             }`}
           >
-            All Series
+            All
           </button>
           {allSeries.map((s) => (
             <button
               key={s}
               onClick={() => setSeriesFilter(s)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+              className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-medium whitespace-nowrap shrink-0 transition ${
                 seriesFilter === s
                   ? "bg-[#9A6B24] text-white"
                   : "bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90] hover:border-[#B88435]"
@@ -777,116 +907,196 @@ export default function LibraryView({
         </div>
       )}
 
-      {/* Notes Grid */}
+      {/* Notes List: Ultra-compact expandable rows on phone, spacious 2-col cards on tablet/desktop */}
       {loading ? (
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
           {[1, 2].map((i) => (
             <div
               key={i}
-              className="h-48 rounded-2xl bg-[#F2ECE1]/70 dark:bg-[#1D1A17] animate-pulse"
+              className="h-16 sm:h-44 rounded-2xl bg-[#F2ECE1]/70 dark:bg-[#1D1A17] animate-pulse"
             />
           ))}
         </div>
       ) : filteredNotes.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-[#D9CEBC] dark:border-[#352F29] bg-[#FDFCFA]/70 dark:bg-[#1D1A17]/60 p-12 text-center">
-          <div className="mx-auto h-12 w-12 rounded-2xl bg-[#F7EAD0] dark:bg-[#33281A] flex items-center justify-center text-[#9A6B24] dark:text-[#DFB164] mb-4">
-            <Plus className="w-6 h-6" />
+        <div className="rounded-2xl sm:rounded-3xl border border-dashed border-[#D9CEBC] dark:border-[#352F29] bg-[#FDFCFA]/70 dark:bg-[#1D1A17]/60 p-6 sm:p-12 text-center">
+          <div className="mx-auto h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-[#F7EAD0] dark:bg-[#33281A] flex items-center justify-center text-[#9A6B24] dark:text-[#DFB164] mb-3">
+            <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <h3 className="font-serif text-xl font-semibold">No study notes found</h3>
-          <p className="text-sm text-[#6B635B] dark:text-[#A39A90] mt-1 max-w-md mx-auto">
-            {search
-              ? "Try a different search term or clear your filter."
-              : "Record your first Sunday sermon, summarize a YouTube message, or scan a printed Bible page to build your personal study library."}
+          <h3 className="font-serif text-lg sm:text-xl font-semibold">
+            No matching studies yet
+          </h3>
+          <p className="text-xs sm:text-sm text-[#6B635B] dark:text-[#A39A90] mt-1 max-w-md mx-auto">
+            {hasActiveQuery
+              ? "Try switching sections or clearing your search."
+              : "Record a sermon, create a Word Study, summarize a YouTube message, or scan a Bible page to build your library."}
           </p>
         </div>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
-          {filteredNotes.map((note) => {
-            const meta = SOURCE_META[note.sourceType] || SOURCE_META.manual;
-            const SourceIcon = meta.icon;
-            const doneCount = note.actionableTakeaways.filter((t) => t.completed).length;
-            const totalCount = note.actionableTakeaways.length;
-
-            return (
-              <div
-                key={note.id}
-                onClick={() => onSelectNote(note.id)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") onSelectNote(note.id);
-                }}
-                className="group rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] hover:shadow-md p-5 transition cursor-pointer flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${meta.badgeClass}`}
-                    >
-                      <SourceIcon className="w-3 h-3" />
-                      {meta.label}
-                    </span>
-                    {note.series && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[#F2ECE1] dark:bg-[#2A2520] text-[#574F47] dark:text-[#C9BFB3] truncate max-w-[140px]">
-                        <FolderOpen className="w-3 h-3 shrink-0 text-[#9A6B24]" />
-                        <span className="truncate">{note.series}</span>
-                      </span>
-                    )}
-                    <div className="flex items-center gap-2 text-xs text-[#8C8278]">
-                      {note.pinned && (
-                        <Pin className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164] fill-current" />
-                      )}
-                      <span>
-                        {new Date(note.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-
-                  <h3 className="font-serif text-xl font-semibold leading-snug text-[#1C1917] dark:text-[#F5F0E8] group-hover:text-[#9A6B24] dark:group-hover:text-[#DFB164] transition">
-                    {note.title}
-                  </h3>
-
-                  {(note.speaker || note.churchOrChannel) && (
-                    <p className="text-xs text-[#6B635B] dark:text-[#A39A90] mt-1">
-                      {[note.speaker, note.churchOrChannel].filter(Boolean).join(" · ")}
-                    </p>
-                  )}
-
-                  <p className="text-sm text-[#574F47] dark:text-[#BDB4AA] mt-2.5 line-clamp-3 leading-relaxed">
-                    {note.summary || note.personalNotes}
-                  </p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-[#F0E9DC] dark:border-[#2A2520] flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {note.scriptureReferences.slice(0, 2).map((ref, idx) => (
+        <>
+          {/* Mobile Compact List (< sm) */}
+          <div className="sm:hidden space-y-2">
+            {mobileVisibleNotes.map((note) => {
+              const isWord = isWordStudyNote(note);
+              const meta = SOURCE_META[note.sourceType] || SOURCE_META.manual;
+              const SourceIcon = isWord ? Languages : meta.icon;
+              const badgeLabel = isWord ? "Word Study" : meta.label;
+              return (
+                <button
+                  key={note.id}
+                  type="button"
+                  onClick={() => onSelectNote(note.id)}
+                  className="w-full text-left rounded-xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] active:border-[#B88435] px-3 py-2.5 flex items-center justify-between gap-2.5 transition"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
                       <span
-                        key={idx}
-                        className="px-2 py-0.5 rounded-md bg-[#F7EAD0]/70 dark:bg-[#33281A] text-[#7B531A] dark:text-[#E8C98F] text-[11px] font-medium"
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${meta.badgeClass}`}
                       >
-                        {ref.reference}
+                        <SourceIcon className="w-2.5 h-2.5" />
+                        {badgeLabel}
                       </span>
-                    ))}
-                    {note.scriptureReferences.length > 2 && (
-                      <span className="text-[11px] text-[#8C8278]">
-                        +{note.scriptureReferences.length - 2} more
+                      {note.series && (
+                        <span className="text-[10px] text-[#7B531A] dark:text-[#DFB164] truncate max-w-[110px]">
+                          · {note.series}
+                        </span>
+                      )}
+                      {note.pinned && (
+                        <Pin className="w-2.5 h-2.5 text-[#9A6B24] dark:text-[#DFB164] fill-current shrink-0" />
+                      )}
+                    </div>
+                    <p className="font-serif text-sm font-semibold leading-snug text-[#1C1917] dark:text-[#F5F0E8] truncate">
+                      {note.title}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-[#8C8278] shrink-0">
+                    <span>
+                      {new Date(note.createdAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </div>
+                </button>
+              );
+            })}
+
+            {!hasActiveQuery && filteredNotes.length > 2 && (
+              <button
+                type="button"
+                onClick={() => setMobileExpanded((v) => !v)}
+                className="w-full py-2 rounded-xl bg-[#F5EFE5] dark:bg-[#191613] border border-[#E6DCCB] dark:border-[#2F2A24] text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] inline-flex items-center justify-center gap-1.5 transition"
+              >
+                {mobileExpanded ? (
+                  <>
+                    Show Less
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </>
+                ) : (
+                  <>
+                    Show All {filteredNotes.length} Saved Studies
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Tablet / Desktop Full 2-Column Card Grid (>= sm) */}
+          <div className="hidden sm:grid sm:grid-cols-2 gap-4">
+            {filteredNotes.map((note) => {
+              const isWord = isWordStudyNote(note);
+              const meta = SOURCE_META[note.sourceType] || SOURCE_META.manual;
+              const SourceIcon = isWord ? Languages : meta.icon;
+              const badgeLabel = isWord ? "Word Study" : meta.label;
+              const doneCount = note.actionableTakeaways.filter(
+                (t) => t.completed
+              ).length;
+              const totalCount = note.actionableTakeaways.length;
+
+              return (
+                <div
+                  key={note.id}
+                  onClick={() => onSelectNote(note.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") onSelectNote(note.id);
+                  }}
+                  className="group rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] hover:shadow-md p-5 transition cursor-pointer flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${meta.badgeClass}`}
+                      >
+                        <SourceIcon className="w-3 h-3" />
+                        {badgeLabel}
+                      </span>
+                      {note.series && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[#F2ECE1] dark:bg-[#2A2520] text-[#574F47] dark:text-[#C9BFB3] truncate max-w-[140px]">
+                          <FolderOpen className="w-3 h-3 shrink-0 text-[#9A6B24]" />
+                          <span className="truncate">{note.series}</span>
+                        </span>
+                      )}
+                      <div className="flex items-center gap-2 text-xs text-[#8C8278]">
+                        {note.pinned && (
+                          <Pin className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164] fill-current" />
+                        )}
+                        <span>
+                          {new Date(note.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <h3 className="font-serif text-xl font-semibold leading-snug text-[#1C1917] dark:text-[#F5F0E8] group-hover:text-[#9A6B24] dark:group-hover:text-[#DFB164] transition">
+                      {note.title}
+                    </h3>
+
+                    {(note.speaker || note.churchOrChannel) && (
+                      <p className="text-xs text-[#6B635B] dark:text-[#A39A90] mt-1">
+                        {[note.speaker, note.churchOrChannel]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    )}
+
+                    <p className="text-sm text-[#574F47] dark:text-[#BDB4AA] mt-2.5 line-clamp-3 leading-relaxed">
+                      {note.summary || note.personalNotes}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-[#F0E9DC] dark:border-[#2A2520] flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {note.scriptureReferences.slice(0, 2).map((ref, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md bg-[#F7EAD0]/70 dark:bg-[#33281A] text-[#7B531A] dark:text-[#E8C98F] text-[11px] font-medium"
+                        >
+                          {ref.reference}
+                        </span>
+                      ))}
+                      {note.scriptureReferences.length > 2 && (
+                        <span className="text-[11px] text-[#8C8278]">
+                          +{note.scriptureReferences.length - 2} more
+                        </span>
+                      )}
+                    </div>
+
+                    {totalCount > 0 && (
+                      <span className="text-[11px] text-[#6B635B] dark:text-[#A39A90]">
+                        {doneCount}/{totalCount} takeaways
                       </span>
                     )}
                   </div>
-
-                  {totalCount > 0 && (
-                    <span className="text-[11px] text-[#6B635B] dark:text-[#A39A90]">
-                      {doneCount}/{totalCount} takeaways
-                    </span>
-                  )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
