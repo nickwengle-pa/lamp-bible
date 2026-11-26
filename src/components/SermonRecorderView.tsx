@@ -425,7 +425,7 @@ export default function SermonRecorderView({
           Sermon Recorder & Notes
         </h1>
         <p className="text-sm text-[#6B635B] dark:text-[#A39A90] mt-1">
-          Built for full 60+ minute Sunday services — keeps your screen awake, captures live captions, compresses voice audio cleanly, and structures everything with Vessel AI.
+          Built for full 60+ minute Sunday services — keeps your screen awake, captures live captions, compresses voice audio cleanly, and structures everything with Lamp AI.
         </p>
       </div>
 
@@ -720,12 +720,12 @@ export default function SermonRecorderView({
             {processing ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Structuring with Vessel AI...
+                Structuring with Lamp AI...
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                Structure with Vessel AI
+                Structure with Lamp AI
               </>
             )}
           </button>

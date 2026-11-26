@@ -15,9 +15,9 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Vessel — Bible Study & Sermon Notes",
+  title: "Lamp — Bible Word Study & Sermon Notes",
   description:
-    "Your personal AI-powered Bible study companion: live sermon recording, YouTube sermon summarizer, Bible reader with contextual verse insights, and instant scripture scanner.",
+    "Your word is a lamp to my feet (Psalm 119:105). Read Scripture with Hebrew & Greek interlinear word studies, record sermons, summarize YouTube teachings, and scan printed Bible pages.",
   manifest: "/manifest.json",
   icons: {
     icon: "/icon.svg",

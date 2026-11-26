@@ -13,6 +13,7 @@ import {
   KeyRound,
   CheckCircle2,
   Lock,
+  Languages,
 } from "lucide-react";
 import {
   AppSettings,
@@ -27,10 +28,11 @@ import SermonRecorderView from "./SermonRecorderView";
 import YouTubeSummarizerView from "./YouTubeSummarizerView";
 import BibleReaderView from "./BibleReaderView";
 import ScriptureScannerView from "./ScriptureScannerView";
+import WordStudyView from "./WordStudyView";
 import SettingsModal from "./SettingsModal";
 import LockScreen from "./LockScreen";
 
-type ActiveTab = "library" | "record" | "youtube" | "bible" | "scan";
+type ActiveTab = "library" | "words" | "record" | "youtube" | "bible" | "scan";
 
 const UNLOCK_STORAGE_KEY = "vessel_device_unlocked_v1";
 
@@ -40,10 +42,11 @@ const NAV_ITEMS: {
   shortLabel: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { id: "library", label: "Study Library", shortLabel: "Library", icon: Library },
+  { id: "library", label: "Home & Library", shortLabel: "Home", icon: Library },
+  { id: "words", label: "Word & Guided Study", shortLabel: "Words", icon: Languages },
+  { id: "bible", label: "Bible Reader", shortLabel: "Bible", icon: BookOpen },
   { id: "record", label: "Record Sermon", shortLabel: "Record", icon: Mic },
   { id: "youtube", label: "YouTube Study", shortLabel: "YouTube", icon: Youtube },
-  { id: "bible", label: "Bible Reader", shortLabel: "Bible", icon: BookOpen },
   { id: "scan", label: "Scripture Scan", shortLabel: "Scan", icon: Camera },
 ];
 
@@ -282,13 +285,13 @@ export default function VesselApp() {
         <div>
           {/* Brand */}
           <div className="flex items-center gap-3 px-2 mb-8">
-            <img src="/icon.svg" alt="Vessel Logo" className="w-9 h-9 rounded-xl shadow-sm" />
+            <img src="/icon.svg" alt="Lamp Logo" className="w-9 h-9 rounded-xl shadow-sm" />
             <div>
               <span className="font-serif text-2xl font-semibold tracking-tight block leading-none">
-                Vessel
+                Lamp
               </span>
               <span className="text-[11px] text-[#786F66] dark:text-[#9C9288]">
-                Bible Study & Notes
+                Psalm 119:105 · Word & Notes
               </span>
             </div>
           </div>
@@ -393,8 +396,8 @@ export default function VesselApp() {
       {/* Mobile Top Header */}
       <header className="lg:hidden sticky top-0 z-30 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <img src="/icon.svg" alt="Vessel Logo" className="w-7 h-7 rounded-lg" />
-          <span className="font-serif text-xl font-semibold">Vessel</span>
+          <img src="/icon.svg" alt="Lamp Logo" className="w-7 h-7 rounded-lg" />
+          <span className="font-serif text-xl font-semibold">Lamp</span>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -479,6 +482,14 @@ export default function VesselApp() {
             </>
           )}
 
+          {activeTab === "words" && (
+            <WordStudyView
+              settings={settings}
+              onOpenScripture={handleOpenScripture}
+              onNoteCreated={handleNoteCreated}
+            />
+          )}
+
           {activeTab === "record" && (
             <SermonRecorderView
               settings={settings}
@@ -525,7 +536,7 @@ export default function VesselApp() {
       </main>
 
       {/* Mobile Bottom Tab Bar */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FDFCFA]/95 dark:bg-[#191613]/95 backdrop-blur-md border-t border-[#E6DCCB] dark:border-[#2A2520] px-2 py-1.5 flex items-center justify-around">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FDFCFA]/95 dark:bg-[#191613]/95 backdrop-blur-md border-t border-[#E6DCCB] dark:border-[#2A2520] px-1 py-1.5 flex items-center justify-around">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = activeTab === item.id;
@@ -536,13 +547,13 @@ export default function VesselApp() {
                 setActiveTab(item.id);
                 if (item.id === "library") setSelectedNoteId(null);
               }}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[11px] font-medium transition ${
+              className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl text-[10px] font-medium transition ${
                 active
                   ? "text-[#9A6B24] dark:text-[#DFB164]"
                   : "text-[#786F66] dark:text-[#9C9288]"
               }`}
             >
-              <Icon className={`w-5 h-5 ${active ? "stroke-[2.4]" : ""}`} />
+              <Icon className={`w-4 h-4 ${active ? "stroke-[2.4]" : ""}`} />
               <span>{item.shortLabel}</span>
             </button>
           );

@@ -78,7 +78,7 @@ export default function AskVesselChat({
     >
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164]">
         <MessageSquareText className="w-3.5 h-3.5" />
-        Ask Vessel Follow-Up
+        Ask Lamp Follow-Up
       </div>
 
       {messages.length === 0 && suggestions.length > 0 && (
@@ -115,7 +115,7 @@ export default function AskVesselChat({
               {m.role === "assistant" && (
                 <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] mb-1">
                   <Sparkles className="w-3 h-3" />
-                  Vessel
+                  Lamp
                 </div>
               )}
               {m.content}

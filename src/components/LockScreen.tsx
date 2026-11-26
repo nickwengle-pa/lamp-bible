@@ -45,13 +45,13 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
         className="w-full max-w-sm rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-8 shadow-xl text-center space-y-5"
       >
         <div className="mx-auto flex items-center justify-center gap-2.5">
-          <img src="/icon.svg" alt="Vessel" className="w-10 h-10 rounded-xl shadow-sm" />
+          <img src="/icon.svg" alt="Lamp" className="w-10 h-10 rounded-xl shadow-sm" />
         </div>
 
         <div>
-          <h1 className="font-serif text-2xl font-semibold">Vessel Is Locked</h1>
+          <h1 className="font-serif text-2xl font-semibold">Lamp Is Locked</h1>
           <p className="text-xs text-[#6B635B] dark:text-[#A39A90] mt-1">
-            Enter your personal passcode to access your study library & notes.
+            Enter your personal passcode to access your Bible studies & notes.
           </p>
         </div>
 
@@ -97,7 +97,7 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
               Unlocking...
             </>
           ) : (
-            "Unlock Vessel"
+            "Unlock Lamp"
           )}
         </button>
       </form>

@@ -1,7 +1,7 @@
 {
-  "name": "Vessel — Bible Study & Sermon Notes",
-  "short_name": "Vessel",
-  "description": "Self-hosted AI Bible study companion: live sermon recording, YouTube summarizer, scripture scanner, and contextual verse insights.",
+  "name": "Lamp — Bible Word Study & Sermon Notes",
+  "short_name": "Lamp",
+  "description": "Your word is a lamp to my feet (Psalm 119:105). AI-powered Bible reader, Hebrew & Greek word studies, live sermon recording, YouTube summarizer, and scripture scanner.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FAF7F2",

@@ -213,7 +213,7 @@ export default function SettingsModal({
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-serif text-xl font-semibold">Vessel Settings</h2>
+              <h2 className="font-serif text-xl font-semibold">Lamp Settings</h2>
               <p className="text-xs text-[#6B635B] dark:text-[#A39A90]">
                 100% private — your key stays in your browser
               </p>

@@ -196,7 +196,7 @@ export default function ScriptureScannerView({
           Instant Scripture Scanner
         </h1>
         <p className="text-sm text-[#6B635B] dark:text-[#A39A90] mt-1">
-          Point your camera at a printed Bible page or upload a photo — Vessel identifies the exact passage, opens it in the Bible Reader, and unpacks its context.
+          Point your camera at a printed Bible page or upload a photo — Lamp identifies the exact passage, opens it in the Bible Reader, and unpacks its context.
         </p>
       </div>
 
