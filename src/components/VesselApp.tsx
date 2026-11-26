@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Library,
   Mic,
@@ -12,8 +12,14 @@ import {
   Moon,
   KeyRound,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
-import { AppSettings, StudyNote } from "@/lib/types";
+import {
+  AppSettings,
+  HighlightColor,
+  StudyNote,
+  VerseHighlight,
+} from "@/lib/types";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "@/lib/client-api";
 import { parseScriptureReference } from "@/lib/bible-books";
 import LibraryView from "./LibraryView";
@@ -22,8 +28,11 @@ import YouTubeSummarizerView from "./YouTubeSummarizerView";
 import BibleReaderView from "./BibleReaderView";
 import ScriptureScannerView from "./ScriptureScannerView";
 import SettingsModal from "./SettingsModal";
+import LockScreen from "./LockScreen";
 
 type ActiveTab = "library" | "record" | "youtube" | "bible" | "scan";
+
+const UNLOCK_STORAGE_KEY = "vessel_device_unlocked_v1";
 
 const NAV_ITEMS: {
   id: ActiveTab;
@@ -46,23 +55,50 @@ export default function VesselApp() {
   const [notes, setNotes] = useState<StudyNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [highlights, setHighlights] = useState<Record<string, VerseHighlight>>(
+    {}
+  );
+
   const [serverConfig, setServerConfig] = useState<{
     hasServerGeminiKey: boolean;
     hasServerEsvKey: boolean;
   }>({ hasServerGeminiKey: false, hasServerEsvKey: false });
 
-  // Bible target state (enables clicking any scripture chip in Library/Scan -> jumps straight to verse!)
+  // Privacy Passcode Lock state
+  const [checkingLock, setCheckingLock] = useState(true);
+  const [lockEnabled, setLockEnabled] = useState(false);
+  const [unlocked, setUnlocked] = useState(true);
+
   const [bibleTarget, setBibleTarget] = useState<{
     book: string;
     chapter: number;
     verse?: number;
   }>({ book: "John", chapter: 15 });
 
-  // Load settings & apply dark/light theme
   useEffect(() => {
     const loaded = loadSettings();
     setSettings(loaded);
     document.documentElement.classList.toggle("dark", loaded.theme === "dark");
+  }, []);
+
+  // Check if Privacy Passcode Lock is enabled on Cloudflare
+  useEffect(() => {
+    fetch("/api/lock")
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((data) => {
+        const enabled = Boolean(data?.enabled);
+        setLockEnabled(enabled);
+        if (enabled) {
+          const remembered =
+            window.localStorage.getItem(UNLOCK_STORAGE_KEY) === "1" ||
+            window.sessionStorage.getItem(UNLOCK_STORAGE_KEY) === "1";
+          setUnlocked(remembered);
+        } else {
+          setUnlocked(true);
+        }
+      })
+      .catch(() => setUnlocked(true))
+      .finally(() => setCheckingLock(false));
   }, []);
 
   const handleUpdateSettings = (next: AppSettings) => {
@@ -78,13 +114,25 @@ export default function VesselApp() {
     });
   };
 
-  const fetchNotes = useCallback(async () => {
+  const fetchNotesAndHighlights = useCallback(async () => {
     setLoadingNotes(true);
     try {
-      const res = await fetch("/api/notes");
-      if (res.ok) {
-        const data = await res.json();
+      const [notesRes, hlRes, cfgRes] = await Promise.all([
+        fetch("/api/notes"),
+        fetch("/api/highlights"),
+        fetch("/api/config-status"),
+      ]);
+      if (notesRes.ok) {
+        const data = await notesRes.json();
         setNotes(data.notes || []);
+      }
+      if (hlRes.ok) {
+        const data = await hlRes.json();
+        setHighlights(data.highlights || {});
+      }
+      if (cfgRes.ok) {
+        const data = await cfgRes.json();
+        setServerConfig(data);
       }
     } finally {
       setLoadingNotes(false);
@@ -92,14 +140,18 @@ export default function VesselApp() {
   }, []);
 
   useEffect(() => {
-    fetchNotes();
-    fetch("/api/config-status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data) setServerConfig(data);
-      })
-      .catch(() => {});
-  }, [fetchNotes]);
+    if (unlocked) {
+      fetchNotesAndHighlights();
+    }
+  }, [unlocked, fetchNotesAndHighlights]);
+
+  const existingSeries = useMemo(() => {
+    const set = new Set<string>();
+    notes.forEach((n) => {
+      if (n.series?.trim()) set.add(n.series.trim());
+    });
+    return Array.from(set).sort();
+  }, [notes]);
 
   const handleNoteCreated = (note: StudyNote) => {
     setNotes((prev) => [note, ...prev.filter((n) => n.id !== note.id)]);
@@ -145,13 +197,80 @@ export default function VesselApp() {
     }
   };
 
+  const handleSaveHighlight = async (
+    book: string,
+    chapter: number,
+    verse: number,
+    color: HighlightColor,
+    note?: string
+  ) => {
+    const res = await fetch("/api/highlights", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ book, chapter, verse, color, note }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.highlights) setHighlights(data.highlights);
+    }
+  };
+
+  const handleDeleteHighlight = async (key: string) => {
+    const res = await fetch(
+      `/api/highlights?key=${encodeURIComponent(key)}`,
+      { method: "DELETE" }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.highlights) setHighlights(data.highlights);
+    }
+  };
+
   const handleOpenScripture = (reference: string) => {
     const parsed = parseScriptureReference(reference);
     if (parsed) {
-      setBibleTarget(parsed);
+      setBibleTarget({
+        book: parsed.book,
+        chapter: parsed.chapter,
+        verse: parsed.verse,
+      });
     }
     setActiveTab("bible");
   };
+
+  const handleOpenLibraryNote = (noteId: string) => {
+    setSelectedNoteId(noteId);
+    setActiveTab("library");
+  };
+
+  const handleLockNow = () => {
+    window.localStorage.removeItem(UNLOCK_STORAGE_KEY);
+    window.sessionStorage.removeItem(UNLOCK_STORAGE_KEY);
+    setUnlocked(false);
+  };
+
+  if (checkingLock) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210]">
+        <img src="/icon.svg" alt="Vessel" className="w-10 h-10 rounded-xl animate-pulse" />
+      </div>
+    );
+  }
+
+  if (lockEnabled && !unlocked) {
+    return (
+      <LockScreen
+        onUnlocked={(remember) => {
+          if (remember) {
+            window.localStorage.setItem(UNLOCK_STORAGE_KEY, "1");
+          } else {
+            window.sessionStorage.setItem(UNLOCK_STORAGE_KEY, "1");
+          }
+          setUnlocked(true);
+        }}
+      />
+    );
+  }
 
   const hasApiKey =
     Boolean(settings.geminiApiKey.trim()) || serverConfig.hasServerGeminiKey;
@@ -237,7 +356,7 @@ export default function VesselApp() {
           <div className="flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-xs font-medium hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-xs font-medium hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
             >
               {settings.theme === "dark" ? (
                 <>
@@ -253,11 +372,20 @@ export default function VesselApp() {
             </button>
             <button
               onClick={() => setSettingsOpen(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-xs font-medium hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-xs font-medium hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
             >
               <Settings className="w-3.5 h-3.5" />
               Settings
             </button>
+            {lockEnabled && (
+              <button
+                onClick={handleLockNow}
+                title="Lock Vessel"
+                className="p-2 rounded-xl border border-[#DFD5C5] dark:border-[#2F2A24] text-[#6B635B] hover:bg-[#EBE3D6] dark:hover:bg-[#25201B] transition"
+              >
+                <Lock className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </aside>
@@ -270,6 +398,15 @@ export default function VesselApp() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {lockEnabled && (
+            <button
+              onClick={handleLockNow}
+              className="p-2 rounded-xl text-[#6B635B] dark:text-[#A39A90] hover:bg-[#F2ECE1] dark:hover:bg-[#25201B]"
+              aria-label="Lock Vessel"
+            >
+              <Lock className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={toggleTheme}
             className="p-2 rounded-xl text-[#6B635B] dark:text-[#A39A90] hover:bg-[#F2ECE1] dark:hover:bg-[#25201B]"
@@ -300,6 +437,7 @@ export default function VesselApp() {
         <div className="px-4 sm:px-8 py-6 sm:py-8">
           {activeTab === "library" && (
             <LibraryView
+              settings={settings}
               notes={notes}
               loading={loadingNotes}
               selectedNoteId={selectedNoteId}
@@ -314,6 +452,7 @@ export default function VesselApp() {
           {activeTab === "record" && (
             <SermonRecorderView
               settings={settings}
+              existingSeries={existingSeries}
               onNoteCreated={handleNoteCreated}
               onOpenSettings={() => setSettingsOpen(true)}
             />
@@ -322,6 +461,7 @@ export default function VesselApp() {
           {activeTab === "youtube" && (
             <YouTubeSummarizerView
               settings={settings}
+              existingSeries={existingSeries}
               onNoteCreated={handleNoteCreated}
               onOpenSettings={() => setSettingsOpen(true)}
             />
@@ -333,6 +473,11 @@ export default function VesselApp() {
               initialBook={bibleTarget.book}
               initialChapter={bibleTarget.chapter}
               highlightVerse={bibleTarget.verse}
+              notes={notes}
+              highlights={highlights}
+              onSaveHighlight={handleSaveHighlight}
+              onDeleteHighlight={handleDeleteHighlight}
+              onOpenLibraryNote={handleOpenLibraryNote}
               onSaveVerseNote={handleSaveManualNote}
               onOpenSettings={() => setSettingsOpen(true)}
             />
@@ -382,6 +527,13 @@ export default function VesselApp() {
         onUpdateSettings={handleUpdateSettings}
         notes={notes}
         serverConfig={serverConfig}
+        lockEnabled={lockEnabled}
+        onLockChanged={(enabled) => {
+          setLockEnabled(enabled);
+          if (enabled) {
+            window.localStorage.setItem(UNLOCK_STORAGE_KEY, "1");
+          }
+        }}
       />
     </div>
   );

@@ -20,6 +20,7 @@ export interface StudyNote {
   id: string;
   title: string;
   sourceType: NoteSourceType;
+  series?: string;
   speaker?: string;
   churchOrChannel?: string;
   sourceUrl?: string;
@@ -37,6 +38,23 @@ export interface StudyNote {
   personalNotes: string;
   transcript?: string;
   durationSeconds?: number;
+}
+
+export type HighlightColor = "gold" | "sage" | "sky" | "rose";
+
+export interface VerseHighlight {
+  key: string; // e.g. "John:15:5"
+  book: string;
+  chapter: number;
+  verse: number;
+  color: HighlightColor;
+  note?: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 export interface VerseInsight {

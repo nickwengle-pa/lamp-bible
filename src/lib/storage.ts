@@ -1,12 +1,15 @@
 import { env } from "cloudflare:workers";
-import { StudyNote } from "./types";
+import { StudyNote, VerseHighlight } from "./types";
 
 interface VesselKV {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
+  delete?(key: string): Promise<void>;
 }
 
 const NOTES_KV_KEY = "vessel_library_notes_v1";
+const HIGHLIGHTS_KV_KEY = "vessel_bible_highlights_v1";
+const PIN_KV_KEY = "vessel_privacy_pin_hash_v1";
 
 const STARTER_NOTES: StudyNote[] = [
   {
@@ -162,4 +165,78 @@ export async function deleteNote(id: string): Promise<boolean> {
   if (filtered.length === notes.length) return false;
   await writeNotes(filtered);
   return true;
+}
+
+// --- Bible Highlights & Margin Notes ---
+let memoryHighlights: Record<string, VerseHighlight> = {};
+
+export async function getAllHighlights(): Promise<Record<string, VerseHighlight>> {
+  const kv = getKv();
+  if (kv) {
+    const raw = await kv.get(HIGHLIGHTS_KV_KEY);
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Record<string, VerseHighlight>;
+    } catch {
+      return {};
+    }
+  }
+  return { ...memoryHighlights };
+}
+
+export async function upsertHighlight(
+  highlight: VerseHighlight
+): Promise<Record<string, VerseHighlight>> {
+  const all = await getAllHighlights();
+  all[highlight.key] = highlight;
+  const kv = getKv();
+  if (kv) {
+    await kv.put(HIGHLIGHTS_KV_KEY, JSON.stringify(all));
+  } else {
+    memoryHighlights = all;
+  }
+  return all;
+}
+
+export async function deleteHighlight(
+  key: string
+): Promise<Record<string, VerseHighlight>> {
+  const all = await getAllHighlights();
+  delete all[key];
+  const kv = getKv();
+  if (kv) {
+    await kv.put(HIGHLIGHTS_KV_KEY, JSON.stringify(all));
+  } else {
+    memoryHighlights = all;
+  }
+  return all;
+}
+
+// --- Optional Privacy PIN Lock ---
+let memoryPinHash: string | null = null;
+
+export async function getPinHash(): Promise<string | null> {
+  const kv = getKv();
+  if (kv) {
+    const raw = await kv.get(PIN_KV_KEY);
+    return raw || null;
+  }
+  return memoryPinHash;
+}
+
+export async function setPinHash(hash: string | null): Promise<void> {
+  const kv = getKv();
+  if (kv) {
+    if (!hash) {
+      if (kv.delete) {
+        await kv.delete(PIN_KV_KEY);
+      } else {
+        await kv.put(PIN_KV_KEY, "");
+      }
+    } else {
+      await kv.put(PIN_KV_KEY, hash);
+    }
+    return;
+  }
+  memoryPinHash = hash;
 }

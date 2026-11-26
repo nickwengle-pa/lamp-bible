@@ -16,12 +16,17 @@ import {
   Compass,
   HeartHandshake,
   Layers,
+  Highlighter,
+  StickyNote,
+  Mic,
 } from "lucide-react";
 import {
   AppSettings,
   BibleChapterResponse,
   BibleVerse,
+  HighlightColor,
   StudyNote,
+  VerseHighlight,
   VerseInsight,
 } from "@/lib/types";
 import {
@@ -30,28 +35,71 @@ import {
   parseScriptureReference,
 } from "@/lib/bible-books";
 import { aiHeaders, bibleHeaders } from "@/lib/client-api";
+import AskVesselChat from "./AskVesselChat";
 
 interface BibleReaderViewProps {
   settings: AppSettings;
   initialBook: string;
   initialChapter: number;
   highlightVerse?: number;
+  notes: StudyNote[];
+  highlights: Record<string, VerseHighlight>;
+  onSaveHighlight: (
+    book: string,
+    chapter: number,
+    verse: number,
+    color: HighlightColor,
+    note?: string
+  ) => Promise<void>;
+  onDeleteHighlight: (key: string) => Promise<void>;
+  onOpenLibraryNote: (noteId: string) => void;
   onSaveVerseNote: (note: Partial<StudyNote>) => Promise<StudyNote | null>;
   onOpenSettings: () => void;
 }
+
+const HIGHLIGHT_STYLES: Record<
+  HighlightColor,
+  { bg: string; swatch: string; label: string }
+> = {
+  gold: {
+    bg: "bg-amber-200/55 dark:bg-amber-800/35",
+    swatch: "bg-amber-400",
+    label: "Gold",
+  },
+  sage: {
+    bg: "bg-emerald-200/50 dark:bg-emerald-800/35",
+    swatch: "bg-emerald-400",
+    label: "Sage",
+  },
+  sky: {
+    bg: "bg-sky-200/50 dark:bg-sky-800/35",
+    swatch: "bg-sky-400",
+    label: "Sky",
+  },
+  rose: {
+    bg: "bg-rose-200/50 dark:bg-rose-800/35",
+    swatch: "bg-rose-400",
+    label: "Rose",
+  },
+};
 
 export default function BibleReaderView({
   settings,
   initialBook,
   initialChapter,
   highlightVerse,
+  notes,
+  highlights,
+  onSaveHighlight,
+  onDeleteHighlight,
+  onOpenLibraryNote,
   onSaveVerseNote,
   onOpenSettings,
 }: BibleReaderViewProps) {
   const [book, setBook] = useState(initialBook || "John");
   const [chapter, setChapter] = useState(initialChapter || 15);
   const [translation, setTranslation] = useState(
-    settings.defaultTranslation || "web"
+    settings.defaultTranslation || "esv"
   );
   const [activeHighlight, setActiveHighlight] = useState<number | undefined>(
     highlightVerse
@@ -68,12 +116,30 @@ export default function BibleReaderView({
   const [pickerTestament, setPickerTestament] = useState<"OT" | "NT">("NT");
   const [quickJump, setQuickJump] = useState("");
 
-  // Verse Insight Panel
+  // Verse Insight Panel & Margin Note Draft
   const [selectedVerse, setSelectedVerse] = useState<BibleVerse | null>(null);
+  const [marginNoteDraft, setMarginNoteDraft] = useState("");
+  const [savingMargin, setSavingMargin] = useState(false);
   const [insight, setInsight] = useState<VerseInsight | null>(null);
   const [loadingInsight, setLoadingInsight] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
   const [savedVerseSuccess, setSavedVerseSuccess] = useState(false);
+
+  // Cross-link saved sermons/studies referencing this chapter!
+  const relatedNotes = React.useMemo(() => {
+    const matched: { note: StudyNote; verse?: number; reference: string }[] = [];
+    for (const n of notes) {
+      for (const ref of n.scriptureReferences || []) {
+        const parsed = parseScriptureReference(ref.reference);
+        if (parsed && parsed.book === book && parsed.chapter === chapter) {
+          if (!matched.some((m) => m.note.id === n.id)) {
+            matched.push({ note: n, verse: parsed.verse, reference: ref.reference });
+          }
+        }
+      }
+    }
+    return matched;
+  }, [notes, book, chapter]);
 
   // Sync external navigation (from Library or Scanner!)
   useEffect(() => {
@@ -176,6 +242,8 @@ export default function BibleReaderView({
 
   const handleVerseClick = async (v: BibleVerse) => {
     setSelectedVerse(v);
+    const vKey = `${v.book_name}:${v.chapter}:${v.verse}`;
+    setMarginNoteDraft(highlights[vKey]?.note || "");
     setInsight(null);
     setInsightError(null);
     setSavedVerseSuccess(false);
@@ -408,17 +476,42 @@ export default function BibleReaderView({
             selectedVerse ? "lg:col-span-7" : "lg:col-span-10 lg:col-start-2"
           } rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-6 sm:p-10 shadow-sm transition-all`}
         >
-          <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#EFE8DC] dark:border-[#2A2520]">
+          <div className="flex items-center justify-between mb-5 pb-4 border-b border-[#EFE8DC] dark:border-[#2A2520]">
             <div>
               <h1 className="font-serif text-3xl sm:text-4xl font-semibold">
                 {book} {chapter}
               </h1>
               <p className="text-xs text-[#6B635B] dark:text-[#A39A90] mt-1">
-                {chapterData?.translation_name || translation.toUpperCase()} · Tap any verse for AI contextual insight
+                {chapterData?.translation_name || translation.toUpperCase()} · Tap any verse to highlight, add notes, or get AI insight
               </p>
             </div>
             <Sparkles className="w-5 h-5 text-[#B88435]/70" />
           </div>
+
+          {/* Cross-linked Sermons & Studies referencing this chapter */}
+          {relatedNotes.length > 0 && (
+            <div className="mb-6 rounded-2xl bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] p-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] flex items-center gap-1.5 mb-2">
+                <Mic className="w-3.5 h-3.5" />
+                Referenced in Your Study Library
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {relatedNotes.map(({ note, reference }) => (
+                  <button
+                    key={note.id}
+                    onClick={() => onOpenLibraryNote(note.id)}
+                    className="text-left px-3 py-1.5 rounded-xl bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] hover:border-[#B88435] text-xs font-medium inline-flex items-center gap-1.5 transition"
+                  >
+                    <span className="text-[#9A6B24] dark:text-[#DFB164] font-semibold">
+                      {reference}
+                    </span>
+                    <span className="text-[#6B635B] dark:text-[#A39A90]">·</span>
+                    <span className="truncate max-w-[200px]">{note.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {loadingChapter ? (
             <div className="py-16 flex flex-col items-center justify-center text-[#6B635B] gap-3">
@@ -442,6 +535,8 @@ export default function BibleReaderView({
               {chapterData?.verses.map((v) => {
                 const isSelected = selectedVerse?.verse === v.verse;
                 const isHighlighted = activeHighlight === v.verse;
+                const vKey = `${v.book_name}:${v.chapter}:${v.verse}`;
+                const savedHl = highlights[vKey];
                 return (
                   <button
                     key={v.verse}
@@ -449,7 +544,9 @@ export default function BibleReaderView({
                     onClick={() => handleVerseClick(v)}
                     className={`w-full text-left px-3 py-2 -mx-3 rounded-xl transition block group ${
                       isSelected
-                        ? "bg-[#F7EAD0]/85 dark:bg-[#3A2D1B]/80 ring-1 ring-[#B88435]/60"
+                        ? "bg-[#F7EAD0]/90 dark:bg-[#3A2D1B]/85 ring-1 ring-[#B88435]/70"
+                        : savedHl
+                        ? HIGHLIGHT_STYLES[savedHl.color].bg
                         : isHighlighted
                         ? "bg-[#F7EAD0]/45 dark:bg-[#33281A]/50"
                         : "hover:bg-[#FAF5EB] dark:hover:bg-[#25211C]"
@@ -459,6 +556,12 @@ export default function BibleReaderView({
                       {v.verse}
                     </sup>
                     <span>{v.text.trim()}</span>
+                    {savedHl?.note && (
+                      <span className="mt-1 flex items-center gap-1.5 font-sans text-xs text-[#6B635B] dark:text-[#BDB4AA] italic">
+                        <StickyNote className="w-3 h-3 text-[#9A6B24] shrink-0" />
+                        <span className="line-clamp-1">{savedHl.note}</span>
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -510,6 +613,90 @@ export default function BibleReaderView({
               <blockquote className="font-serif italic text-base leading-relaxed pl-3.5 border-l-2 border-[#B88435] text-[#3F3A35] dark:text-[#DED6CB]">
                 &ldquo;{selectedVerse.text.trim()}&rdquo;
               </blockquote>
+
+              {/* Highlight Color Swatches & Margin Note */}
+              {(() => {
+                const vKey = `${selectedVerse.book_name}:${selectedVerse.chapter}:${selectedVerse.verse}`;
+                const existing = highlights[vKey];
+                return (
+                  <div className="rounded-2xl bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] p-3.5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] inline-flex items-center gap-1.5">
+                        <Highlighter className="w-3.5 h-3.5 text-[#9A6B24]" />
+                        Highlight & Margin Note
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {(["gold", "sage", "sky", "rose"] as HighlightColor[]).map(
+                          (color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              title={`Highlight ${HIGHLIGHT_STYLES[color].label}`}
+                              onClick={() =>
+                                onSaveHighlight(
+                                  selectedVerse.book_name,
+                                  selectedVerse.chapter,
+                                  selectedVerse.verse,
+                                  color,
+                                  marginNoteDraft
+                                )
+                              }
+                              className={`w-5 h-5 rounded-full ${HIGHLIGHT_STYLES[color].swatch} transition transform hover:scale-110 ${
+                                existing?.color === color
+                                  ? "ring-2 ring-offset-2 ring-[#1C1917] dark:ring-white dark:ring-offset-[#141210]"
+                                  : ""
+                              }`}
+                            />
+                          )
+                        )}
+                        {existing && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onDeleteHighlight(vKey);
+                              setMarginNoteDraft("");
+                            }}
+                            className="ml-1 text-[11px] text-rose-600 hover:underline"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={marginNoteDraft}
+                        onChange={(e) => setMarginNoteDraft(e.target.value)}
+                        placeholder="Add a personal margin note for this verse..."
+                        className="flex-1 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+                      />
+                      <button
+                        type="button"
+                        disabled={savingMargin}
+                        onClick={async () => {
+                          setSavingMargin(true);
+                          try {
+                            await onSaveHighlight(
+                              selectedVerse.book_name,
+                              selectedVerse.chapter,
+                              selectedVerse.verse,
+                              existing?.color || "gold",
+                              marginNoteDraft
+                            );
+                          } finally {
+                            setSavingMargin(false);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-xs font-semibold disabled:opacity-50 transition"
+                      >
+                        {savingMargin ? "..." : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {loadingInsight && (
                 <div className="py-10 flex flex-col items-center gap-2.5 text-sm text-[#6B635B] dark:text-[#A39A90]">
@@ -666,6 +853,19 @@ export default function BibleReaderView({
                       </>
                     )}
                   </button>
+
+                  {/* Follow-up Ask Vessel Chat for this verse */}
+                  <AskVesselChat
+                    settings={settings}
+                    compact
+                    contextType="bible"
+                    contextTitle={`${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`}
+                    contextBody={`Verse (${translation.toUpperCase()}): "${selectedVerse.text.trim()}"\nHistorical Context: ${insight.historicalContext}\nDeeper Meaning: ${insight.deeperMeaning}`}
+                    suggestions={[
+                      "How does this connect to Jesus?",
+                      "Give a real-life example of living this out",
+                    ]}
+                  />
                 </>
               )}
             </div>

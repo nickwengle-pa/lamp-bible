@@ -16,51 +16,154 @@ interface SermonAIOutput {
   transcript?: string;
 }
 
+async function uploadAudioToGeminiFiles(
+  audioBytes: ArrayBuffer,
+  mimeType: string,
+  apiKey: string
+): Promise<{ fileUri: string; mimeType: string }> {
+  const cleanMime = mimeType.split(";")[0] || "audio/webm";
+  const uploadRes = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?uploadType=media&key=${encodeURIComponent(
+      apiKey
+    )}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": cleanMime,
+        "X-Goog-Upload-Protocol": "raw",
+      },
+      body: audioBytes,
+    }
+  );
+
+  const json = (await uploadRes.json().catch(() => null)) as {
+    file?: { uri?: string; mimeType?: string };
+    error?: { message?: string };
+  } | null;
+  if (!uploadRes.ok || !json?.file?.uri) {
+    throw new Error(
+      json?.error?.message ||
+        `Could not upload sermon audio to Gemini Files API (${uploadRes.status}).`
+    );
+  }
+
+  return {
+    fileUri: json.file.uri as string,
+    mimeType: (json.file.mimeType as string) || cleanMime,
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const apiKey = resolveApiKey(request);
     const model = resolveModel(request);
 
-    const body = (await request.json()) as {
-      title?: string;
-      speaker?: string;
-      church?: string;
-      rawNotes?: string;
-      audioBase64?: string;
-      audioMimeType?: string;
-      durationSeconds?: number;
-    };
-
-    const hasAudio = Boolean(body.audioBase64 && body.audioMimeType);
-    const hasNotes = Boolean(body.rawNotes && body.rawNotes.trim().length > 0);
-
-    if (!hasAudio && !hasNotes) {
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "Please record/upload audio or type some sermon notes first." },
+        {
+          error:
+            "Missing Gemini API key. Open Settings and add your Google AI Studio API key.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const contentType = request.headers.get("content-type") || "";
+    let title = "";
+    let speaker = "";
+    let church = "";
+    let series = "";
+    let rawNotes = "";
+    let liveTranscript = "";
+    let durationSeconds: number | undefined;
+    let audioPart: GeminiPart | null = null;
+
+    if (contentType.includes("multipart/form-data")) {
+      const form = await request.formData();
+      title = String(form.get("title") || "");
+      speaker = String(form.get("speaker") || "");
+      church = String(form.get("church") || "");
+      series = String(form.get("series") || "");
+      rawNotes = String(form.get("rawNotes") || "");
+      liveTranscript = String(form.get("liveTranscript") || "");
+      const dur = Number(form.get("durationSeconds") || 0);
+      if (dur > 0) durationSeconds = dur;
+
+      const audioFile = form.get("audio");
+      if (audioFile && audioFile instanceof File && audioFile.size > 0) {
+        const bytes = await audioFile.arrayBuffer();
+        const mime = (audioFile.type || "audio/webm").split(";")[0];
+        // Upload directly to Gemini Files API so 45-90 min sermons work reliably!
+        const uploaded = await uploadAudioToGeminiFiles(bytes, mime, apiKey);
+        audioPart = {
+          fileData: {
+            mimeType: uploaded.mimeType,
+            fileUri: uploaded.fileUri,
+          },
+        };
+      }
+    } else {
+      const body = (await request.json()) as {
+        title?: string;
+        speaker?: string;
+        church?: string;
+        series?: string;
+        rawNotes?: string;
+        liveTranscript?: string;
+        audioBase64?: string;
+        audioMimeType?: string;
+        durationSeconds?: number;
+      };
+      title = body.title || "";
+      speaker = body.speaker || "";
+      church = body.church || "";
+      series = body.series || "";
+      rawNotes = body.rawNotes || "";
+      liveTranscript = body.liveTranscript || "";
+      durationSeconds = body.durationSeconds;
+
+      if (body.audioBase64 && body.audioMimeType) {
+        audioPart = {
+          inlineData: {
+            mimeType: body.audioMimeType.split(";")[0],
+            data: body.audioBase64,
+          },
+        };
+      }
+    }
+
+    const hasAudio = Boolean(audioPart);
+    const hasNotes = rawNotes.trim().length > 0;
+    const hasLiveTranscript = liveTranscript.trim().length > 0;
+
+    if (!hasAudio && !hasNotes && !hasLiveTranscript) {
+      return NextResponse.json(
+        {
+          error:
+            "Please record/upload audio, capture live captions, or type some sermon notes first.",
+        },
         { status: 400 }
       );
     }
 
     const parts: GeminiPart[] = [];
-
-    if (hasAudio && body.audioBase64 && body.audioMimeType) {
-      parts.push({
-        inlineData: {
-          mimeType: body.audioMimeType,
-          data: body.audioBase64,
-        },
-      });
-    }
+    if (audioPart) parts.push(audioPart);
 
     const promptText = `You are Vessel, a thoughtful, warm, and biblically faithful AI Bible study & sermon note assistant.
-Analyze the provided ${hasAudio ? "sermon audio recording" : ""}${
-      hasAudio && hasNotes ? " AND " : ""
-    }${hasNotes ? "user's live rough notes" : ""}.
+Analyze the provided sermon inputs (${[
+      hasAudio && "sermon audio recording",
+      hasLiveTranscript && "live speech transcript",
+      hasNotes && "user's personal live notes",
+    ]
+      .filter(Boolean)
+      .join(", ")}).
 
-${body.title ? `User's tentative title: ${body.title}` : ""}
-${body.speaker ? `Speaker / Pastor: ${body.speaker}` : ""}
-${body.church ? `Church / Context: ${body.church}` : ""}
-${hasNotes ? `\nUser's Live Notes:\n"""\n${body.rawNotes}\n"""` : ""}
+${title ? `User's tentative title: ${title}` : ""}
+${speaker ? `Speaker / Pastor: ${speaker}` : ""}
+${church ? `Church / Context: ${church}` : ""}
+${series ? `Sermon Series: ${series}` : ""}
+${hasLiveTranscript ? `\nLive Captured Transcript:\n"""\n${liveTranscript.slice(0, 50000)}\n"""` : ""}
+${hasNotes ? `\nUser's Live Notes:\n"""\n${rawNotes}\n"""` : ""}
 
 Return ONLY valid JSON matching this exact schema:
 {
@@ -86,27 +189,31 @@ Return ONLY valid JSON matching this exact schema:
   "transcript": "${
     hasAudio
       ? "A clean, readable transcript of the audio recording"
-      : "Empty string since no audio was provided"
+      : hasLiveTranscript
+      ? "A cleaned-up, properly punctuated version of the live transcript"
+      : "Empty string since no audio or transcript was provided"
   }"
 }`;
 
     parts.push({ text: promptText });
 
     const aiData = await callGemini<SermonAIOutput>({
-      apiKey: apiKey || undefined,
+      apiKey,
       model,
       parts,
       jsonMode: true,
       temperature: 0.35,
+      timeoutMs: 55000,
     });
 
     const now = new Date().toISOString();
     const note: StudyNote = {
       id: crypto.randomUUID(),
-      title: body.title?.trim() || aiData.title || "Sermon Study Note",
+      title: title.trim() || aiData.title || "Sermon Study Note",
       sourceType: "sermon",
-      speaker: body.speaker?.trim() || aiData.speaker || undefined,
-      churchOrChannel: body.church?.trim() || undefined,
+      series: series.trim() || undefined,
+      speaker: speaker.trim() || aiData.speaker || undefined,
+      churchOrChannel: church.trim() || undefined,
       createdAt: now,
       updatedAt: now,
       pinned: false,
@@ -125,9 +232,9 @@ Return ONLY valid JSON matching this exact schema:
       reflectionQuestions: Array.isArray(aiData.reflectionQuestions)
         ? aiData.reflectionQuestions
         : [],
-      personalNotes: body.rawNotes?.trim() || "",
-      transcript: aiData.transcript?.trim() || undefined,
-      durationSeconds: body.durationSeconds,
+      personalNotes: rawNotes.trim() || "",
+      transcript: aiData.transcript?.trim() || liveTranscript.trim() || undefined,
+      durationSeconds,
     };
 
     const saved = await createNote(note);

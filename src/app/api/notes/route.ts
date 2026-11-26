@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       id: body.id || crypto.randomUUID(),
       title: body.title?.trim() || "Untitled Study Note",
       sourceType: body.sourceType || "manual",
+      series: body.series?.trim() || undefined,
       speaker: body.speaker?.trim() || undefined,
       churchOrChannel: body.churchOrChannel?.trim() || undefined,
       sourceUrl: body.sourceUrl?.trim() || undefined,

@@ -15,6 +15,7 @@ import { aiHeaders } from "@/lib/client-api";
 
 interface YouTubeSummarizerViewProps {
   settings: AppSettings;
+  existingSeries?: string[];
   onNoteCreated: (note: StudyNote) => void;
   onOpenSettings: () => void;
 }
@@ -29,10 +30,12 @@ interface PreviewMeta {
 
 export default function YouTubeSummarizerView({
   settings,
+  existingSeries = [],
   onNoteCreated,
   onOpenSettings,
 }: YouTubeSummarizerViewProps) {
   const [url, setUrl] = useState("");
+  const [series, setSeries] = useState("");
   const [focusPrompt, setFocusPrompt] = useState("");
   const [manualTranscript, setManualTranscript] = useState("");
   const [showManual, setShowManual] = useState(false);
@@ -79,6 +82,7 @@ export default function YouTubeSummarizerView({
         headers: aiHeaders(settings),
         body: JSON.stringify({
           url: url.trim(),
+          series: series.trim() || undefined,
           focusPrompt: focusPrompt.trim() || undefined,
           manualTranscript: manualTranscript.trim() || undefined,
         }),
@@ -185,17 +189,39 @@ export default function YouTubeSummarizerView({
           </div>
         )}
 
-        <div>
-          <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1.5">
-            Optional Study Focus (e.g., &ldquo;Focus on small-group discussion questions&rdquo;)
-          </label>
-          <input
-            type="text"
-            value={focusPrompt}
-            onChange={(e) => setFocusPrompt(e.target.value)}
-            placeholder="Leave blank for Vessel's standard comprehensive sermon outline"
-            className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
-          />
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1.5">
+              Series / Folder (optional)
+            </label>
+            <input
+              type="text"
+              list="yt-series-suggestions"
+              value={series}
+              onChange={(e) => setSeries(e.target.value)}
+              placeholder="e.g. Gospel of John"
+              className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+            />
+            {existingSeries.length > 0 && (
+              <datalist id="yt-series-suggestions">
+                {existingSeries.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            )}
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[#6B635B] dark:text-[#A39A90] block mb-1.5">
+              Optional Study Focus
+            </label>
+            <input
+              type="text"
+              value={focusPrompt}
+              onChange={(e) => setFocusPrompt(e.target.value)}
+              placeholder="e.g. Small-group discussion questions"
+              className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+            />
+          </div>
         </div>
 
         {/* Optional Manual Transcript Fallback */}

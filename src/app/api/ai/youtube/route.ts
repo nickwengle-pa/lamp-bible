@@ -129,6 +129,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       url?: string;
+      series?: string;
       manualTranscript?: string;
       focusPrompt?: string;
       previewOnly?: boolean;
@@ -232,6 +233,7 @@ ${promptSchema}`;
       id: crypto.randomUUID(),
       title: aiData.title || meta.title || "YouTube Sermon Notes",
       sourceType: "youtube",
+      series: body.series?.trim() || undefined,
       speaker: aiData.speaker || meta.author || undefined,
       churchOrChannel: meta.author || undefined,
       sourceUrl: meta.canonicalUrl,

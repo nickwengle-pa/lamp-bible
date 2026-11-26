@@ -123,7 +123,11 @@ export async function callGemini<T = string>(
         signal: AbortSignal.timeout(perAttemptTimeout),
       });
 
-      const json = await response.json().catch(() => null);
+      const json = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+        candidates?: any[];
+        promptFeedback?: { blockReason?: string };
+      } | null;
 
       if (response.ok) {
         payload = json;

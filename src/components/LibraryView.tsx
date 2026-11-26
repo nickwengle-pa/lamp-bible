@@ -21,11 +21,14 @@ import {
   ChevronDown,
   ChevronUp,
   Plus,
+  FolderOpen,
 } from "lucide-react";
-import { NoteSourceType, StudyNote } from "@/lib/types";
+import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
 import { formatDuration, noteToMarkdown } from "@/lib/client-api";
+import AskVesselChat from "./AskVesselChat";
 
 interface LibraryViewProps {
+  settings: AppSettings;
   notes: StudyNote[];
   loading: boolean;
   selectedNoteId: string | null;
@@ -72,6 +75,7 @@ const SOURCE_META: Record<
 };
 
 export default function LibraryView({
+  settings,
   notes,
   loading,
   selectedNoteId,
@@ -83,10 +87,20 @@ export default function LibraryView({
 }: LibraryViewProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | NoteSourceType>("all");
+  const [seriesFilter, setSeriesFilter] = useState<string>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [personalDraft, setPersonalDraft] = useState("");
+  const [seriesDraft, setSeriesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  const allSeries = useMemo(() => {
+    const set = new Set<string>();
+    notes.forEach((n) => {
+      if (n.series?.trim()) set.add(n.series.trim());
+    });
+    return Array.from(set).sort();
+  }, [notes]);
 
   const selectedNote = useMemo(
     () => notes.find((n) => n.id === selectedNoteId) || null,
@@ -96,6 +110,7 @@ export default function LibraryView({
   React.useEffect(() => {
     if (selectedNote) {
       setPersonalDraft(selectedNote.personalNotes || "");
+      setSeriesDraft(selectedNote.series || "");
       setShowTranscript(false);
     }
   }, [selectedNote?.id]);
@@ -103,18 +118,21 @@ export default function LibraryView({
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
       if (filter !== "all" && note.sourceType !== filter) return false;
+      if (seriesFilter !== "all" && (note.series || "") !== seriesFilter)
+        return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return (
         note.title.toLowerCase().includes(q) ||
         note.summary.toLowerCase().includes(q) ||
         (note.speaker || "").toLowerCase().includes(q) ||
+        (note.series || "").toLowerCase().includes(q) ||
         note.tags.some((t) => t.toLowerCase().includes(q)) ||
         note.scriptureReferences.some((r) => r.reference.toLowerCase().includes(q)) ||
         note.personalNotes.toLowerCase().includes(q)
       );
     });
-  }, [notes, filter, search]);
+  }, [notes, filter, seriesFilter, search]);
 
   const handleCopyMarkdown = async (note: StudyNote) => {
     await navigator.clipboard.writeText(noteToMarkdown(note));
@@ -253,6 +271,42 @@ export default function LibraryView({
                 )}
               </div>
             )}
+
+            {/* Series / Folder assignment */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 text-xs text-[#6B635B] dark:text-[#A39A90]">
+                <FolderOpen className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164]" />
+                <span>Series:</span>
+              </div>
+              <input
+                type="text"
+                list="detail-series-list"
+                value={seriesDraft}
+                onChange={(e) => setSeriesDraft(e.target.value)}
+                onBlur={() => {
+                  const trimmed = seriesDraft.trim();
+                  if (trimmed !== (selectedNote.series || "")) {
+                    onUpdateNote(selectedNote.id, {
+                      series: trimmed || undefined,
+                    });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="Assign to a series / folder..."
+                className="px-2.5 py-1 rounded-lg border border-[#E6DCCB] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40 w-52"
+              />
+              {allSeries.length > 0 && (
+                <datalist id="detail-series-list">
+                  {allSeries.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              )}
+            </div>
 
             {selectedNote.tags.length > 0 && (
               <div className="mt-4 flex flex-wrap gap-1.5">
@@ -438,6 +492,21 @@ export default function LibraryView({
               />
             </section>
 
+            {/* Interactive Ask Vessel Follow-Up Chat */}
+            <section className="pt-4 border-t border-[#EFE8DC] dark:border-[#2A2520]">
+              <AskVesselChat
+                settings={settings}
+                contextType="note"
+                contextTitle={selectedNote.title}
+                contextBody={noteToMarkdown(selectedNote)}
+                suggestions={[
+                  "Turn this into a 5-day devotional plan",
+                  "Explain the key Greek/Hebrew words behind this message",
+                  "Give me 3 discussion questions for small group",
+                ]}
+              />
+            </section>
+
             {/* Collapsible Transcript */}
             {selectedNote.transcript && (
               <section className="pt-2 border-t border-[#EFE8DC] dark:border-[#2A2520]">
@@ -536,6 +605,39 @@ export default function LibraryView({
         </div>
       </div>
 
+      {/* Series / Folders Filter Strip */}
+      {allSeries.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] inline-flex items-center gap-1 shrink-0">
+            <FolderOpen className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164]" />
+            Series:
+          </span>
+          <button
+            onClick={() => setSeriesFilter("all")}
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+              seriesFilter === "all"
+                ? "bg-[#9A6B24] text-white"
+                : "bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90]"
+            }`}
+          >
+            All Series
+          </button>
+          {allSeries.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSeriesFilter(s)}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition ${
+                seriesFilter === s
+                  ? "bg-[#9A6B24] text-white"
+                  : "bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90] hover:border-[#B88435]"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Notes Grid */}
       {loading ? (
         <div className="grid sm:grid-cols-2 gap-4">
@@ -585,6 +687,12 @@ export default function LibraryView({
                       <SourceIcon className="w-3 h-3" />
                       {meta.label}
                     </span>
+                    {note.series && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[#F2ECE1] dark:bg-[#2A2520] text-[#574F47] dark:text-[#C9BFB3] truncate max-w-[140px]">
+                        <FolderOpen className="w-3 h-3 shrink-0 text-[#9A6B24]" />
+                        <span className="truncate">{note.series}</span>
+                      </span>
+                    )}
                     <div className="flex items-center gap-2 text-xs text-[#8C8278]">
                       {note.pinned && (
                         <Pin className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164] fill-current" />
