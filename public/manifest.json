@@ -1,0 +1,17 @@
+{
+  "name": "Vessel — Bible Study & Sermon Notes",
+  "short_name": "Vessel",
+  "description": "Self-hosted AI Bible study companion: live sermon recording, YouTube summarizer, scripture scanner, and contextual verse insights.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#9A6B24",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
