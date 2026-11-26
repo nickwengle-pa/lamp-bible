@@ -78,6 +78,7 @@ export interface BibleChapterResponse {
 
 export interface BibleBook {
   name: string;
+  usfm: string;
   chapters: number;
   testament: "OT" | "NT";
   category: string;

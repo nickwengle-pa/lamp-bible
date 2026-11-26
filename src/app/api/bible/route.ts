@@ -125,12 +125,96 @@ async function fetchEsvPassage(
   };
 }
 
+async function fetchBsbPassage(passage: string): Promise<BibleChapterResponse> {
+  const parsed = parseScriptureReference(passage);
+  if (!parsed) {
+    throw new Error(`Could not recognize Bible passage "${passage}".`);
+  }
+
+  const url = `https://bible.helloao.org/api/BSB/${encodeURIComponent(
+    parsed.usfm
+  )}/${parsed.chapter}.json`;
+
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `Could not load BSB passage "${parsed.book} ${parsed.chapter}" (${res.status}).`
+    );
+  }
+
+  const payload = (await res.json()) as {
+    chapter?: {
+      content?: Array<{
+        type?: string;
+        number?: number;
+        content?: Array<string | { text?: string; lineBreak?: boolean }>;
+      }>;
+    };
+  };
+
+  const rawItems = payload.chapter?.content || [];
+  const verses: BibleVerse[] = [];
+
+  for (const item of rawItems) {
+    if (item.type !== "verse" || typeof item.number !== "number") continue;
+    const parts: string[] = [];
+    for (const piece of item.content || []) {
+      if (typeof piece === "string") {
+        parts.push(piece);
+      } else if (piece && typeof piece.text === "string") {
+        parts.push(piece.text);
+      } else if (piece && piece.lineBreak) {
+        parts.push(" ");
+      }
+    }
+    const text = parts.join(" ").replace(/\s+/g, " ").replace(/\s+([,.;:!?])/g, "$1").trim();
+    if (text) {
+      verses.push({
+        book_id: parsed.usfm,
+        book_name: parsed.book,
+        chapter: parsed.chapter,
+        verse: item.number,
+        text,
+      });
+    }
+  }
+
+  if (verses.length === 0) {
+    throw new Error(`No BSB verses found for "${parsed.book} ${parsed.chapter}".`);
+  }
+
+  return {
+    reference: `${parsed.book} ${parsed.chapter}`,
+    translation_id: "bsb",
+    translation_name: "Berean Standard Bible (BSB)",
+    verses,
+    text: verses.map((v) => v.text).join(" "),
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const passage = searchParams.get("passage")?.trim() || "John 15";
     const translation =
-      searchParams.get("translation")?.trim().toLowerCase() || "web";
+      searchParams.get("translation")?.trim().toLowerCase() || "bsb";
+
+    if (translation === "bsb") {
+      const cacheKey = `bsb::${passage.toLowerCase()}`;
+      const cached = chapterCache.get(cacheKey);
+      if (cached) return NextResponse.json(cached);
+
+      const data = await fetchBsbPassage(passage);
+      if (chapterCache.size > 150) {
+        const firstKey = chapterCache.keys().next().value;
+        if (firstKey) chapterCache.delete(firstKey);
+      }
+      chapterCache.set(cacheKey, data);
+      return NextResponse.json(data);
+    }
 
     if (translation === "esv") {
       const esvKey = resolveEsvKey(request);
