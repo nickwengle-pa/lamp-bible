@@ -28,6 +28,7 @@ const USERS_KV_KEY = "lamp_users_v1";
 const USER_REC_PREFIX = "lamp_user_rec_";
 const USERS_MIGRATED_KEY = "lamp_users_migrated_v2";
 const AUTH_SETTINGS_KV_KEY = "lamp_auth_settings_v1";
+const INTERNAL_SESSION_SECRET_KV_KEY = "lamp_internal_session_secret_v1";
 export const SESSION_COOKIE_NAME = "lamp_session";
 const SESSION_MAX_AGE_SEC = 60 * 60 * 24 * 30; // 30 days
 
@@ -42,6 +43,7 @@ const AVATAR_COLORS = [
 
 let memoryUsers: StoredUser[] = [];
 let memoryAuthSettings: AuthSettings = {};
+let runtimeSessionSecret: string | null = null;
 
 // Per-key in-isolate write queue to serialize competing mutations (uniqueness,
 // initial owner assignment, profile edits) so concurrent saves never overwrite each other.
@@ -68,12 +70,44 @@ function getEnvVar(name: string): string | undefined {
   return cfEnv?.[name]?.trim() || process.env[name]?.trim() || undefined;
 }
 
-function getSigningSecret(): string {
-  return (
-    getEnvVar("SESSION_SECRET") ||
-    getEnvVar("GEMINI_API_KEY") ||
-    "lamp-bible-dev-session-secret"
-  );
+/**
+ * Resolves the HMAC session signing secret without ever falling back to a
+ * hardcoded public constant or reusing third-party API keys.
+ * Uses SESSION_SECRET env var when configured, otherwise generates and
+ * persists a cryptographically random 256-bit secret in KV (or runtime memory).
+ */
+async function getSigningSecret(): Promise<string> {
+  const configured = getEnvVar("SESSION_SECRET");
+  if (configured && configured.length >= 16) {
+    return configured;
+  }
+
+  if (runtimeSessionSecret) {
+    return runtimeSessionSecret;
+  }
+
+  return withSerializedWrite("auth:session_secret", async () => {
+    if (runtimeSessionSecret) return runtimeSessionSecret;
+
+    const kv = getKv();
+    if (kv) {
+      const existing = await kv.get(INTERNAL_SESSION_SECRET_KV_KEY);
+      if (existing && existing.length >= 32) {
+        runtimeSessionSecret = existing;
+        return existing;
+      }
+    }
+
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    const generated = toHex(randomBytes);
+
+    if (kv) {
+      await kv.put(INTERNAL_SESSION_SECRET_KV_KEY, generated);
+    }
+    runtimeSessionSecret = generated;
+    return generated;
+  });
 }
 
 export function getConfiguredOwnerSetupKey(): string | null {
@@ -146,9 +180,10 @@ async function hashPassword(password: string, saltHex: string): Promise<string> 
 
 async function signPayload(payloadB64: string): Promise<string> {
   const enc = new TextEncoder();
+  const secret = await getSigningSecret();
   const key = await crypto.subtle.importKey(
     "raw",
-    enc.encode(getSigningSecret()),
+    enc.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
