@@ -113,7 +113,7 @@ export default function SettingsModal({
     setProfileChurch(user?.church || "");
     setInviteDraft(inviteCode || "");
     setProfileMsg(null);
-    if (open) {
+    if (open && user?.role === "admin") {
       fetchAvailableModels(settings);
     }
   }, [settings, open, user?.id, inviteCode, fetchAvailableModels]);
@@ -149,6 +149,8 @@ export default function SettingsModal({
   };
 
   if (!open) return null;
+
+  const isAdmin = user?.role === "admin";
 
   const handleSave = () => {
     onUpdateSettings(draft);
@@ -269,7 +271,9 @@ export default function SettingsModal({
             <div>
               <h2 className="font-serif text-xl font-semibold">Lamp Settings</h2>
               <p className="text-xs text-[#6B635B] dark:text-[#A39A90]">
-                100% private — your key stays in your browser
+                {isAdmin
+                  ? "Owner preferences, members & API settings"
+                  : "Manage your profile, Bible translation & reading theme"}
               </p>
             </div>
           </div>
@@ -388,142 +392,137 @@ export default function SettingsModal({
             </div>
           )}
 
-          {/* API Key */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium flex items-center gap-1.5">
-                <KeyRound className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
-                Google Gemini API Key
-                {serverConfig?.hasServerGeminiKey && (
-                  <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    Set on Cloudflare
-                  </span>
+          {/* Owner-Only API & Model Configuration */}
+          {isAdmin && (
+            <>
+              {/* API Key */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium flex items-center gap-1.5">
+                    <KeyRound className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
+                    Google Gemini API Key
+                    {serverConfig?.hasServerGeminiKey && (
+                      <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        Set on Cloudflare
+                      </span>
+                    )}
+                  </label>
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline inline-flex items-center gap-1"
+                  >
+                    AI Studio
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={draft.geminiApiKey}
+                    onChange={(e) =>
+                      setDraft({ ...draft, geminiApiKey: e.target.value })
+                    }
+                    placeholder="Optional local override (Cloudflare secret active)"
+                    className="flex-1 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestKey}
+                    disabled={testing}
+                    className="px-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] text-sm font-medium hover:bg-[#F2ECE1] dark:hover:bg-[#2A2520] transition inline-flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {testing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Test"
+                    )}
+                  </button>
+                </div>
+                {testResult && (
+                  <div
+                    className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
+                      testResult.ok
+                        ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                        : "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+                    }`}
+                  >
+                    {testResult.ok ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                    )}
+                    <span>{testResult.message}</span>
+                  </div>
                 )}
-              </label>
-              <a
-                href="https://aistudio.google.com/apikey"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline inline-flex items-center gap-1"
-              >
-                Get free key at AI Studio
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={draft.geminiApiKey}
-                onChange={(e) =>
-                  setDraft({ ...draft, geminiApiKey: e.target.value })
-                }
-                placeholder="AIzaSy..."
-                className="flex-1 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
-              />
-              <button
-                type="button"
-                onClick={handleTestKey}
-                disabled={testing}
-                className="px-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] text-sm font-medium hover:bg-[#F2ECE1] dark:hover:bg-[#2A2520] transition inline-flex items-center gap-1.5 disabled:opacity-50"
-              >
-                {testing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  "Test"
-                )}
-              </button>
-            </div>
-            <p className="text-xs text-[#6B635B] dark:text-[#A39A90]">
-              Powers sermon transcription, YouTube summaries, verse insights, and camera scanning. You can also set{" "}
-              <code className="px-1 py-0.5 rounded bg-[#F2ECE1] dark:bg-[#2A2520]">
-                GEMINI_API_KEY
-              </code>{" "}
-              in <code className="px-1 py-0.5 rounded bg-[#F2ECE1] dark:bg-[#2A2520]">.env.local</code>.
-            </p>
-            {testResult && (
-              <div
-                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${
-                  testResult.ok
-                    ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
-                    : "bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300"
-                }`}
-              >
-                {testResult.ok ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                )}
-                <span>{testResult.message}</span>
               </div>
-            )}
-          </div>
 
-          {/* Model Selection */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium block">Gemini Model</label>
-              <button
-                type="button"
-                onClick={() => fetchAvailableModels(draft)}
-                disabled={loadingModels}
-                className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline disabled:opacity-50"
-              >
-                {loadingModels ? "Loading models..." : "Refresh live models"}
-              </button>
-            </div>
-            <select
-              value={draft.geminiModel}
-              onChange={(e) =>
-                setDraft({ ...draft, geminiModel: e.target.value })
-              }
-              className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
-            >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-              {!models.some((m) => m.id === draft.geminiModel) && (
-                <option value={draft.geminiModel}>{draft.geminiModel}</option>
-              )}
-            </select>
-          </div>
+              {/* Model Selection */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium block">Gemini Model</label>
+                  <button
+                    type="button"
+                    onClick={() => fetchAvailableModels(draft)}
+                    disabled={loadingModels}
+                    className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline disabled:opacity-50"
+                  >
+                    {loadingModels ? "Loading models..." : "Refresh live models"}
+                  </button>
+                </div>
+                <select
+                  value={draft.geminiModel}
+                  onChange={(e) =>
+                    setDraft({ ...draft, geminiModel: e.target.value })
+                  }
+                  className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                >
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                  {!models.some((m) => m.id === draft.geminiModel) && (
+                    <option value={draft.geminiModel}>{draft.geminiModel}</option>
+                  )}
+                </select>
+              </div>
 
-          {/* ESV Bible API Token */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium flex items-center gap-1.5">
-                <KeyRound className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
-                ESV Bible API Token
-                {serverConfig?.hasServerEsvKey && (
-                  <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    Set on Cloudflare
-                  </span>
-                )}
-              </label>
-              <a
-                href="https://api.esv.org/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline inline-flex items-center gap-1"
-              >
-                Get free token at api.esv.org
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-            <input
-              type="password"
-              value={draft.esvApiKey || ""}
-              onChange={(e) =>
-                setDraft({ ...draft, esvApiKey: e.target.value })
-              }
-              placeholder="Paste your Crossway ESV API token..."
-              className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
-            />
-            <p className="text-xs text-[#6B635B] dark:text-[#A39A90]">
-              Unlocks the official English Standard Version (ESV) inside the Bible Reader.
-            </p>
-          </div>
+              {/* ESV Bible API Token */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium flex items-center gap-1.5">
+                    <KeyRound className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
+                    ESV Bible API Token
+                    {serverConfig?.hasServerEsvKey && (
+                      <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        Set on Cloudflare
+                      </span>
+                    )}
+                  </label>
+                  <a
+                    href="https://api.esv.org/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#9A6B24] dark:text-[#DFB164] hover:underline inline-flex items-center gap-1"
+                  >
+                    api.esv.org
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <input
+                  type="password"
+                  value={draft.esvApiKey || ""}
+                  onChange={(e) =>
+                    setDraft({ ...draft, esvApiKey: e.target.value })
+                  }
+                  placeholder="Optional local override (Cloudflare secret active)"
+                  className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                />
+              </div>
+            </>
+          )}
 
           {/* Bible Translation */}
           <div className="space-y-1.5">
@@ -576,7 +575,8 @@ export default function SettingsModal({
             </div>
           </div>
 
-          {/* Privacy Passcode Lock */}
+          {/* Privacy Passcode Lock (Owner only) */}
+          {isAdmin && (
           <div className="pt-3 border-t border-[#E6DCCB] dark:border-[#2F2A24] space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium flex items-center gap-1.5">
@@ -648,6 +648,7 @@ export default function SettingsModal({
               </p>
             )}
           </div>
+          )}
 
           {/* Backup */}
           <div className="pt-2 border-t border-[#E6DCCB] dark:border-[#2F2A24] flex items-center justify-between">

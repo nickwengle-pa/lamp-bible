@@ -422,26 +422,28 @@ export default function VesselApp() {
             </button>
           </div>
 
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
-              hasApiKey
-                ? "bg-emerald-50/80 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900"
-                : "bg-[#F7EAD0] text-[#7B531A] dark:bg-[#33281A] dark:text-[#E8C98F] border border-[#E5CCA0] dark:border-[#4A3A22]"
-            }`}
-          >
-            {hasApiKey ? (
-              <>
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span className="truncate">Gemini AI Connected</span>
-              </>
-            ) : (
-              <>
-                <KeyRound className="w-4 h-4 shrink-0" />
-                <span className="truncate">Add Free Gemini Key</span>
-              </>
-            )}
-          </button>
+          {user.role === "admin" && (
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                hasApiKey
+                  ? "bg-emerald-50/80 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-900"
+                  : "bg-[#F7EAD0] text-[#7B531A] dark:bg-[#33281A] dark:text-[#E8C98F] border border-[#E5CCA0] dark:border-[#4A3A22]"
+              }`}
+            >
+              {hasApiKey ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span className="truncate">AI &amp; Bible APIs Connected</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Configure API Keys</span>
+                </>
+              )}
+            </button>
+          )}
 
           <div className="flex items-center gap-2">
             <button
