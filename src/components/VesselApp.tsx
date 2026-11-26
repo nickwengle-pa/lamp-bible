@@ -704,11 +704,13 @@ export default function VesselApp() {
                 notes={notes}
                 loading={loadingNotes}
                 selectedNoteId={selectedNoteId}
+                userName={user.displayName}
                 onSelectNote={setSelectedNoteId}
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
                 onOpenScripture={handleOpenScripture}
                 onQuickNavigate={(tab) => setActiveTab(tab)}
+                onOpenGuide={() => setGuideOpen(true)}
               />
 
               {!selectedNoteId && configLoaded && (

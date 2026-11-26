@@ -24,6 +24,8 @@ import {
   FolderOpen,
   Languages,
   ChevronRight,
+  PlayCircle,
+  Library as LibraryIcon,
 } from "lucide-react";
 import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
 import { formatDuration, noteToMarkdown } from "@/lib/client-api";
@@ -35,11 +37,13 @@ interface LibraryViewProps {
   notes: StudyNote[];
   loading: boolean;
   selectedNoteId: string | null;
+  userName?: string;
   onSelectNote: (id: string | null) => void;
   onUpdateNote: (id: string, updates: Partial<StudyNote>) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
   onOpenScripture: (reference: string) => void;
-  onQuickNavigate: (tab: "record" | "youtube" | "bible" | "scan") => void;
+  onQuickNavigate: (tab: "words" | "record" | "youtube" | "bible" | "scan") => void;
+  onOpenGuide?: () => void;
 }
 
 const SOURCE_META: Record<
@@ -121,15 +125,18 @@ export default function LibraryView({
   notes,
   loading,
   selectedNoteId,
+  userName,
   onSelectNote,
   onUpdateNote,
   onDeleteNote,
   onOpenScripture,
   onQuickNavigate,
+  onOpenGuide,
 }: LibraryViewProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LibrarySection>("all");
   const [seriesFilter, setSeriesFilter] = useState<string>("all");
+  const [libraryDrawerOpen, setLibraryDrawerOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false);
   const [jumpBook, setJumpBook] = useState("John");
@@ -619,74 +626,200 @@ export default function LibraryView({
     );
   }
 
-  // Library Index View
+  // Library Index View — Clean Home Launchpad + Collapsible Study Library
   const hasActiveQuery =
     Boolean(search.trim()) || filter !== "all" || seriesFilter !== "all";
   const mobileVisibleNotes =
-    mobileExpanded || hasActiveQuery ? filteredNotes : filteredNotes.slice(0, 2);
+    mobileExpanded || hasActiveQuery ? filteredNotes : filteredNotes.slice(0, 3);
+  const firstName = userName?.trim().split(/\s+/)[0];
+
+  const handleOpenSavedLibrary = () => {
+    setLibraryDrawerOpen(true);
+    setMobileExpanded(true);
+    window.setTimeout(() => {
+      document
+        .getElementById("lamp-study-library")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
 
   return (
-    <div className="max-w-5xl mx-auto pb-3 sm:pb-6 space-y-3 sm:space-y-5">
-      {/* Header & Quick Capture Strip */}
-      <div className="flex items-center justify-between gap-3">
+    <div className="max-w-5xl mx-auto pb-2 sm:pb-5 space-y-4 sm:space-y-6">
+      {/* Clean Greeting & Purpose Header */}
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="hidden sm:block text-xs font-semibold uppercase tracking-[0.16em] text-[#9A6B24] dark:text-[#DFB164]">
-            Your Study Archive
-          </p>
-          <h1 className="font-serif text-xl sm:text-4xl font-semibold tracking-tight sm:mt-1 flex items-center gap-2">
-            <span>Study Library</span>
-            <span className="sm:hidden px-2 py-0.5 rounded-full bg-[#F2ECE1] dark:bg-[#2A2520] text-[#7B531A] dark:text-[#DFB164] font-sans text-[11px] font-semibold">
-              {notes.length}
-            </span>
+          <h1 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-[#1C1917] dark:text-[#F5F0E8]">
+            {firstName ? `Welcome, ${firstName}` : "Welcome to Lamp"}
           </h1>
+          <p className="text-xs sm:text-sm text-[#6B635B] dark:text-[#A39A90] mt-0.5">
+            Read Scripture, study Greek &amp; Hebrew, or capture sermons in one place.
+          </p>
         </div>
 
-        {/* Mobile quick expand/collapse toggle */}
-        <button
-          type="button"
-          onClick={() => setMobileExpanded((v) => !v)}
-          className="sm:hidden px-2.5 py-1.5 rounded-xl border border-[#DFD5C5] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] text-[11px] font-semibold text-[#574F47] dark:text-[#CFC5B9] inline-flex items-center gap-1 shrink-0"
-        >
-          {mobileExpanded ? (
-            <>
-              Compact
-              <ChevronUp className="w-3.5 h-3.5" />
-            </>
-          ) : (
-            <>
-              Expand All
-              <ChevronDown className="w-3.5 h-3.5" />
-            </>
-          )}
-        </button>
-
-        <div className="hidden lg:flex flex-wrap gap-2">
+        {onOpenGuide && (
           <button
-            onClick={() => onQuickNavigate("record")}
-            className="px-4 py-2.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-sm font-semibold shadow-sm inline-flex items-center gap-2 transition"
+            type="button"
+            onClick={onOpenGuide}
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#DFC9A3] dark:border-[#4A3A22] bg-[#FAF4E8] dark:bg-[#251E15] text-[#7B531A] dark:text-[#DFB164] text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 hover:brightness-95 transition"
           >
-            <Mic className="w-4 h-4" />
-            Record Sermon
+            <PlayCircle className="w-3.5 h-3.5" />
+            <span>Guide</span>
           </button>
-          <button
-            onClick={() => onQuickNavigate("youtube")}
-            className="px-3.5 py-2.5 rounded-xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] hover:border-[#B88435] text-sm font-medium inline-flex items-center gap-2 transition"
-          >
-            <Youtube className="w-4 h-4 text-rose-600" />
-            YouTube
-          </button>
-          <button
-            onClick={() => onQuickNavigate("scan")}
-            className="px-3.5 py-2.5 rounded-xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] hover:border-[#B88435] text-sm font-medium inline-flex items-center gap-2 transition"
-          >
-            <Camera className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-            Scan Page
-          </button>
-        </div>
+        )}
       </div>
 
+      {/* Clear 6-Tile Quick-Action Launchpad (Instantly shows what Lamp does!) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => onQuickNavigate("bible")}
+          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-[#F7EAD0] dark:bg-[#3A2D1B] text-[#9A6B24] dark:text-[#DFB164] flex items-center justify-center shrink-0">
+            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              Read Bible
+            </p>
+            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+              9 versions · Tap verse
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onQuickNavigate("words")}
+          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
+            <Languages className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              Word &amp; Guides
+            </p>
+            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+              Greek, Hebrew &amp; lessons
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onQuickNavigate("record")}
+          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-amber-100/85 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 flex items-center justify-center shrink-0">
+            <Mic className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              Record Sermon
+            </p>
+            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+              Live audio &amp; captions
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onQuickNavigate("youtube")}
+          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-rose-100/80 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0">
+            <Youtube className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              YouTube Study
+            </p>
+            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+              Paste a sermon link
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onQuickNavigate("scan")}
+          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+            <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              Scan Bible
+            </p>
+            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+              Snap a printed page
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleOpenSavedLibrary}
+          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+        >
+          <div className="h-9 w-9 rounded-xl bg-stone-200/80 dark:bg-stone-800 text-[#574F47] dark:text-[#DFB164] flex items-center justify-center shrink-0">
+            <LibraryIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              Saved Notes ({notes.length})
+            </p>
+            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+              Search &amp; series
+            </p>
+          </div>
+        </button>
+      </div>
+
+      {/* Collapsible Study Library & Series Drawer (1 sleek bar on phone until expanded; open on desktop) */}
+      <div
+        id="lamp-study-library"
+        className="w-full min-w-0 rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] shadow-sm overflow-hidden"
+      >
+        <button
+          type="button"
+          onClick={() => setLibraryDrawerOpen((v) => !v)}
+          className="w-full px-3.5 py-3 flex items-center justify-between gap-2 text-left hover:bg-[#FAF7F2] dark:hover:bg-[#231F1B] transition"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <FolderOpen className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164] shrink-0" />
+            <span className="font-serif text-base sm:text-lg font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
+              My Study Library &amp; Series
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-[#F2ECE1] dark:bg-[#2A2520] text-[#7B531A] dark:text-[#DFB164] text-[11px] font-semibold shrink-0">
+              {notes.length}
+            </span>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#9A6B24] dark:text-[#DFB164] shrink-0">
+            <span className="sm:hidden">
+              {libraryDrawerOpen ? "Hide" : "Browse"}
+            </span>
+            <span className="hidden sm:inline">
+              {libraryDrawerOpen ? "Hide Library" : "Open Library"}
+            </span>
+            {libraryDrawerOpen ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </span>
+        </button>
+
+        <div
+          className={`${
+            libraryDrawerOpen || hasActiveQuery ? "block" : "hidden"
+          } border-t border-[#EFE8DC] dark:border-[#2A2520] p-3 sm:p-4 space-y-3`}
+        >
       {/* Search, Section Tabs & Collapsible Book/Chapter/Verse Selector */}
-      <div className="w-full min-w-0 rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-2.5 sm:p-3.5 shadow-sm space-y-2.5 sm:space-y-3">
+      <div className="w-full min-w-0 space-y-2.5 sm:space-y-3">
         {/* Top Row: Search + Mobile Scripture Jump Toggle */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="relative flex-1 min-w-0">
@@ -1098,6 +1231,8 @@ export default function LibraryView({
           </div>
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }
