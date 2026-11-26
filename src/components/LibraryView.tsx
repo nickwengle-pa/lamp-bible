@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
 import { formatDuration, noteToMarkdown } from "@/lib/client-api";
+import { BIBLE_BOOKS, parseScriptureReference } from "@/lib/bible-books";
 import AskVesselChat from "./AskVesselChat";
 
 interface LibraryViewProps {
@@ -88,7 +89,27 @@ export default function LibraryView({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | NoteSourceType>("all");
   const [seriesFilter, setSeriesFilter] = useState<string>("all");
+  const [jumpBook, setJumpBook] = useState("John");
+  const [jumpChapter, setJumpChapter] = useState(1);
+  const [jumpVerse, setJumpVerse] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const selectedJumpBookObj = useMemo(
+    () => BIBLE_BOOKS.find((b) => b.name === jumpBook) || BIBLE_BOOKS[42],
+    [jumpBook]
+  );
+
+  const parsedSearchRef = useMemo(
+    () => (search.trim() ? parseScriptureReference(search) : null),
+    [search]
+  );
+
+  const buildJumpReference = () => {
+    const v = parseInt(jumpVerse.trim(), 10);
+    return Number.isFinite(v) && v > 0
+      ? `${jumpBook} ${jumpChapter}:${v}`
+      : `${jumpBook} ${jumpChapter}`;
+  };
   const [showTranscript, setShowTranscript] = useState(false);
   const [personalDraft, setPersonalDraft] = useState("");
   const [seriesDraft, setSeriesDraft] = useState("");
@@ -573,36 +594,152 @@ export default function LibraryView({
         </div>
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="flex flex-col md:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search sermons, Bible passages, themes, or speakers..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
-          />
+      {/* Search, Theme Filter & Quick Book/Chapter/Verse Selector */}
+      <div className="rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-3.5 shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row gap-2.5">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-[#8C8278] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search themes, sermons, speakers, or type a verse (e.g. Romans 8:28)..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 md:pb-0">
+            {(["all", "sermon", "youtube", "scan", "verse"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setFilter(tab)}
+                className={`px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition ${
+                  filter === tab
+                    ? "bg-[#1C1917] text-[#FAF7F2] dark:bg-[#DFB164] dark:text-[#141210]"
+                    : "bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90] hover:border-[#B88435]"
+                }`}
+              >
+                {tab === "all"
+                  ? `All (${notes.length})`
+                  : SOURCE_META[tab].label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          {(["all", "sermon", "youtube", "scan", "verse"] as const).map((tab) => (
+        {/* Smart Passage Jump Chip when typing a Bible reference in Search */}
+        {parsedSearchRef && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#F7EAD0]/60 dark:bg-[#33281A] border border-[#E5CCA0] dark:border-[#4B3A23] text-xs">
+            <span className="text-[#5F4114] dark:text-[#E8C98F]">
+              Detected passage:{" "}
+              <strong>
+                {parsedSearchRef.book} {parsedSearchRef.chapter}
+                {parsedSearchRef.verse ? `:${parsedSearchRef.verse}` : ""}
+              </strong>
+            </span>
             <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition ${
-                filter === tab
-                  ? "bg-[#1C1917] text-[#FAF7F2] dark:bg-[#DFB164] dark:text-[#141210]"
-                  : "bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] text-[#6B635B] dark:text-[#A39A90] hover:border-[#B88435]"
-              }`}
+              type="button"
+              onClick={() =>
+                onOpenScripture(
+                  `${parsedSearchRef.book} ${parsedSearchRef.chapter}${
+                    parsedSearchRef.verse ? `:${parsedSearchRef.verse}` : ""
+                  }`
+                )
+              }
+              className="px-3 py-1 rounded-lg bg-[#9A6B24] hover:bg-[#7B531A] text-white font-semibold inline-flex items-center gap-1.5 transition"
             >
-              {tab === "all"
-                ? `All (${notes.length})`
-                : SOURCE_META[tab].label}
+              <BookOpen className="w-3.5 h-3.5" />
+              Read Passage →
             </button>
-          ))}
-        </div>
+          </div>
+        )}
+
+        {/* Compact Book, Chapter & Verse Selector Row */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onOpenScripture(buildJumpReference());
+          }}
+          className="pt-2.5 border-t border-[#EFE8DC] dark:border-[#2A2520] flex flex-wrap items-center gap-2"
+        >
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] inline-flex items-center gap-1.5 mr-1">
+            <BookOpen className="w-3.5 h-3.5" />
+            Scripture Selector
+          </span>
+
+          <select
+            aria-label="Select Bible Book"
+            value={jumpBook}
+            onChange={(e) => {
+              setJumpBook(e.target.value);
+              setJumpChapter(1);
+              setJumpVerse("");
+            }}
+            className="rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-[#FAF7F2] dark:bg-[#141210] px-3 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+          >
+            <optgroup label="Old Testament">
+              {BIBLE_BOOKS.filter((b) => b.testament === "OT").map((b) => (
+                <option key={b.name} value={b.name}>
+                  {b.name}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="New Testament">
+              {BIBLE_BOOKS.filter((b) => b.testament === "NT").map((b) => (
+                <option key={b.name} value={b.name}>
+                  {b.name}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+
+          <select
+            aria-label="Select Chapter"
+            value={jumpChapter}
+            onChange={(e) => {
+              setJumpChapter(parseInt(e.target.value, 10));
+              setJumpVerse("");
+            }}
+            className="rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-[#FAF7F2] dark:bg-[#141210] px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+          >
+            {Array.from(
+              { length: selectedJumpBookObj.chapters },
+              (_, i) => i + 1
+            ).map((ch) => (
+              <option key={ch} value={ch}>
+                Ch. {ch}
+              </option>
+            ))}
+          </select>
+
+          <input
+            type="number"
+            min={1}
+            max={176}
+            value={jumpVerse}
+            onChange={(e) => setJumpVerse(e.target.value)}
+            placeholder="Verse (opt.)"
+            aria-label="Verse number"
+            className="w-24 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-[#FAF7F2] dark:bg-[#141210] px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+          />
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => setSearch(buildJumpReference())}
+              className="px-3 py-1.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] hover:bg-[#F2ECE1] dark:hover:bg-[#2A2520] text-xs font-medium transition"
+            >
+              Filter Notes
+            </button>
+            <button
+              type="submit"
+              className="px-3.5 py-1.5 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-xs font-semibold inline-flex items-center gap-1.5 transition"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Read {buildJumpReference()}
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Series / Folders Filter Strip */}
