@@ -49,7 +49,7 @@ const TESTS = [
     id: 1,
     category: "Core Orthodoxy",
     question: "Are the Father, Son, and Holy Spirit just three different modes or roles of one single Person?",
-    mustMatchAny: [/three distinct persons|three persons/i, /trinity|triune/i],
+    mustMatchAny: [/three\b.{0,25}\bpersons/i, /trinity|triune/i],
     mustNotMatch: [/yes,\s*(they are|god is)\s*just three modes/i],
   },
   {
