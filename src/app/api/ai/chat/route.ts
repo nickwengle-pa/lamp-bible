@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { getSessionUser } from "@/lib/auth";
+import { buildTheologySystemInstruction } from "@/lib/theology";
 import { ChatMessage } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -53,10 +54,9 @@ Answer clearly, warmly, and faithfully rooted in Scripture. Keep your answer foc
     const answer = await callGemini<string>({
       apiKey: apiKey || undefined,
       model,
-      systemInstruction:
-        "You are Lamp, a thoughtful, warm, and biblically sound Bible study companion helping believers understand Scripture and apply sermons to everyday life.",
+      systemInstruction: buildTheologySystemInstruction("chat"),
       parts: [{ text: prompt }],
-      temperature: 0.45,
+      temperature: 0.4,
       timeoutMs: 25000,
     });
 

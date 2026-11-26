@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { getSessionUser } from "@/lib/auth";
+import { buildTheologySystemInstruction } from "@/lib/theology";
+import {
+  fetchGroundedVerseLexicon,
+  formatGroundedLexiconForPrompt,
+} from "@/lib/lexicon-grounding";
 import { VerseInsight } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -30,42 +35,46 @@ export async function POST(request: Request) {
       );
     }
 
-    const prompt = `You are Lamp, a scholarly yet deeply accessible Bible study guide.
-Provide rich contextual insight for this Bible verse:
+    // Ground the AI in real BSB interlinear + Strong's/BDB/Thayer's definitions before generation
+    const groundedWords = await fetchGroundedVerseLexicon(body.reference);
+    const lexiconBlock = formatGroundedLexiconForPrompt(groundedWords);
 
-Reference: ${body.reference} (${body.translation || "WEB"})
+    const prompt = `Provide rich, historical-grammatical contextual insight for this Bible verse:
+
+Reference: ${body.reference} (${body.translation || "BSB"})
 Verse Text: "${body.verseText}"
 ${body.surroundingContext ? `Surrounding chapter snippet: "${body.surroundingContext}"` : ""}
-
+${lexiconBlock ? `\n${lexiconBlock}\n` : ""}
 Return ONLY valid JSON matching this exact schema:
 {
   "historicalContext": "2-3 sentences explaining the historical setting, time period, and cultural backdrop",
   "intendedAudience": "1-2 sentences describing who originally received these words and what they were facing",
-  "literaryContext": "1-2 sentences explaining how this verse fits within its chapter and book",
+  "literaryContext": "1-2 sentences explaining how this verse fits within its chapter, book, and literary genre",
   "keyWordStudy": [
     {
       "term": "Important English word/phrase from the verse",
-      "originalLanguage": "Hebrew or Greek word (transliterated + original script)",
-      "meaning": "Nuanced meaning and why it deepens understanding"
+      "originalLanguage": "Hebrew or Greek word with transliteration, original script, and Strong's # from the verified lexicon data when provided",
+      "meaning": "Nuanced lexical meaning grounded in BDB/Thayer's and this verse's context"
     }
   ],
-  "deeperMeaning": "3-4 sentences unpacking the core theological truth clearly and warmly",
+  "deeperMeaning": "3-4 sentences unpacking the core theological truth clearly, warmly, and faithfully in context",
   "crossReferences": [
     {
       "reference": "Related Bible reference e.g. Isaiah 41:10",
       "connection": "One sentence explaining how it echoes or illuminates this verse"
     }
   ],
-  "lifeApplication": ["2 to 3 practical, grounded ways to live out this verse today"],
+  "lifeApplication": ["2 to 3 practical, Spirit-empowered ways to live out this verse today"],
   "prayerPrompt": "A short, heartfelt 1-2 sentence prayer inspired by this verse"
 }`;
 
     const ai = await callGemini<Omit<VerseInsight, "reference" | "translation" | "verseText">>({
       apiKey: apiKey || undefined,
       model,
+      systemInstruction: buildTheologySystemInstruction("verse"),
       parts: [{ text: prompt }],
       jsonMode: true,
-      temperature: 0.35,
+      temperature: 0.3,
     });
 
     const insight: VerseInsight = {
