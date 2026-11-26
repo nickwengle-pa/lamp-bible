@@ -454,21 +454,21 @@ export default function BibleReaderView({
   };
 
   return (
-    <div className={embedded ? "max-w-5xl mx-auto" : "max-w-6xl mx-auto pb-16"}>
+    <div className={embedded ? "w-full min-w-0 max-w-5xl mx-auto" : "w-full min-w-0 max-w-6xl mx-auto pb-16"}>
       {/* Top Reader Toolbar */}
       <div
         className={
           embedded
             ? "mb-4 pb-3 border-b border-[#E6DCCB] dark:border-[#2A2520]"
-            : "sticky top-0 z-20 -mx-4 px-4 py-3 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] mb-6"
+            : "sticky top-0 z-20 -mx-3.5 sm:-mx-4 px-3.5 sm:px-4 py-3 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] mb-6"
         }
       >
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Book / Chapter Selector */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
             <button
               onClick={handlePrevChapter}
-              className="p-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] hover:bg-[#F2ECE1] dark:hover:bg-[#25211D] transition"
+              className="p-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] hover:bg-[#F2ECE1] dark:hover:bg-[#25211D] transition shrink-0"
               title="Previous chapter"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -476,15 +476,15 @@ export default function BibleReaderView({
 
             <button
               onClick={() => setPickerOpen(!pickerOpen)}
-              className="px-4 py-2 rounded-xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#DFD5C5] dark:border-[#36302A] hover:border-[#B88435] font-serif text-base font-semibold inline-flex items-center gap-2 transition"
+              className="px-3 sm:px-4 py-2 rounded-xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#DFD5C5] dark:border-[#36302A] hover:border-[#B88435] font-serif text-sm sm:text-base font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition truncate"
             >
-              <BookOpen className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
-              {book} {chapter}
+              <BookOpen className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164] shrink-0" />
+              <span className="truncate">{book} {chapter}</span>
             </button>
 
             <button
               onClick={handleNextChapter}
-              className="p-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] hover:bg-[#F2ECE1] dark:hover:bg-[#25211D] transition"
+              className="p-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] hover:bg-[#F2ECE1] dark:hover:bg-[#25211D] transition shrink-0"
               title="Next chapter"
             >
               <ChevronRight className="w-4 h-4" />
@@ -492,7 +492,7 @@ export default function BibleReaderView({
           </div>
 
           {/* Quick Jump + Translation */}
-          <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+          <div className="flex items-center gap-1.5 sm:gap-2 justify-end shrink-0">
             <form onSubmit={handleQuickJump} className="relative hidden sm:block">
               <Search className="w-3.5 h-3.5 text-[#8C8278] absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -507,7 +507,7 @@ export default function BibleReaderView({
             <select
               value={translation}
               onChange={(e) => setTranslation(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+              className="px-2.5 sm:px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
             >
               {BIBLE_TRANSLATIONS.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -519,7 +519,7 @@ export default function BibleReaderView({
             {embedded && onExpandFullScreen && (
               <button
                 onClick={onExpandFullScreen}
-                className="px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] hover:border-[#B88435] text-xs font-medium transition"
+                className="px-2.5 sm:px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] hover:border-[#B88435] text-xs font-medium whitespace-nowrap transition"
               >
                 Full Screen
               </button>
@@ -607,12 +607,12 @@ export default function BibleReaderView({
       </div>
 
       {/* Main Split Layout: Scripture + Contextual Insight Drawer */}
-      <div className="grid lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-w-0">
         {/* Scripture Column */}
         <div
-          className={`${
+          className={`min-w-0 w-full ${
             selectedVerse ? "lg:col-span-7" : "lg:col-span-10 lg:col-start-2"
-          } rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-6 sm:p-10 shadow-sm transition-all`}
+          } rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-4 sm:p-8 lg:p-10 shadow-sm transition-all overflow-hidden`}
         >
           <div className="flex items-center justify-between mb-5 pb-4 border-b border-[#EFE8DC] dark:border-[#2A2520]">
             <div>
@@ -696,7 +696,7 @@ export default function BibleReaderView({
                     key={v.verse}
                     id={`verse-${v.verse}`}
                     onClick={() => handleVerseClick(v)}
-                    className={`w-full text-left px-2.5 py-1.5 -mx-2.5 rounded-xl transition block group ${
+                    className={`w-full text-left px-2 sm:px-2.5 py-1.5 rounded-xl transition block group ${
                       isSelected
                         ? "border-l-2 border-[#9A6B24] bg-[#FAF4E8]/70 dark:bg-[#251E15]/60 pl-3"
                         : "hover:bg-[#FAF5EB]/70 dark:hover:bg-[#25211C]/60"

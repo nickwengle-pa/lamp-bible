@@ -6,10 +6,14 @@
   html {
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
+    overflow-x: clip;
+    max-width: 100%;
   }
 
   body {
     @apply bg-[#FAF7F2] text-[#1C1917] antialiased selection:bg-[#ECD19B]/60 selection:text-[#1C1917] dark:bg-[#141210] dark:text-[#F5F0E8] dark:selection:bg-[#B88435]/40;
+    overflow-x: clip;
+    max-width: 100%;
   }
 }
 

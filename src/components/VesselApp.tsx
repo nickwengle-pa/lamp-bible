@@ -294,7 +294,7 @@ export default function VesselApp() {
     Boolean(settings.geminiApiKey.trim()) || serverConfig.hasServerGeminiKey;
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip flex flex-col lg:flex-row">
       {/* Desktop Left Sidebar */}
       <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 bg-[#F5EFE5] dark:bg-[#191613] border-r border-[#E6DCCB] dark:border-[#2A2520] px-4 py-6 justify-between">
         <div>
@@ -543,8 +543,8 @@ export default function VesselApp() {
       )}
 
       {/* Main Content Workspace */}
-      <main className="flex-1 lg:pl-64 pb-20 lg:pb-8">
-        <div className="px-4 sm:px-8 py-6 sm:py-8">
+      <main className="flex-1 min-w-0 w-full lg:pl-64 pb-24 lg:pb-8">
+        <div className="w-full max-w-full px-3.5 sm:px-8 py-5 sm:py-8">
           {activeTab === "library" && (
             <>
               <LibraryView
@@ -643,7 +643,7 @@ export default function VesselApp() {
       </main>
 
       {/* Mobile Bottom Tab Bar — 4 spacious core tabs (YouTube & Scan live cleanly in the Hamburger Menu) */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FDFCFA]/95 dark:bg-[#191613]/95 backdrop-blur-md border-t border-[#E6DCCB] dark:border-[#2A2520] px-2 py-1.5 grid grid-cols-4">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#FDFCFA]/95 dark:bg-[#191613]/95 backdrop-blur-md border-t border-[#E6DCCB] dark:border-[#2A2520] px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] grid grid-cols-4">
         {NAV_ITEMS.filter((i) =>
           ["library", "bible", "words", "record"].includes(i.id)
         ).map((item) => {
