@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { getSessionUser } from "@/lib/auth";
-import { buildTheologySystemInstruction } from "@/lib/theology";
+import { buildEffectiveTheologySystemInstruction } from "@/lib/theology";
 import { ScanResult } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -56,7 +56,7 @@ Return ONLY valid JSON matching this exact schema:
     const result = await callGemini<ScanResult>({
       apiKey: apiKey || undefined,
       model,
-      systemInstruction: buildTheologySystemInstruction("scan"),
+      systemInstruction: await buildEffectiveTheologySystemInstruction("scan"),
       parts: [
         {
           inlineData: {

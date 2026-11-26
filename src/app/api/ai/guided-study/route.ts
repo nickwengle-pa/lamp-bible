@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { createNote } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth";
-import { buildTheologySystemInstruction } from "@/lib/theology";
+import { buildEffectiveTheologySystemInstruction } from "@/lib/theology";
 import { StudyNote } from "@/lib/types";
 
 interface GuidedAIOutput {
@@ -86,7 +86,7 @@ Return ONLY valid JSON matching this exact schema:
     const aiData = await callGemini<GuidedAIOutput>({
       apiKey: apiKey || undefined,
       model,
-      systemInstruction: buildTheologySystemInstruction("guided"),
+      systemInstruction: await buildEffectiveTheologySystemInstruction("guided"),
       parts: [{ text: prompt }],
       jsonMode: true,
       temperature: 0.35,

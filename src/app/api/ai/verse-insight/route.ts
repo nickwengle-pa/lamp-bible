@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { callGemini, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { getSessionUser } from "@/lib/auth";
-import { buildTheologySystemInstruction } from "@/lib/theology";
+import { buildEffectiveTheologySystemInstruction } from "@/lib/theology";
 import {
   fetchGroundedVerseLexicon,
   formatGroundedLexiconForPrompt,
@@ -71,7 +71,7 @@ Return ONLY valid JSON matching this exact schema:
     const ai = await callGemini<Omit<VerseInsight, "reference" | "translation" | "verseText">>({
       apiKey: apiKey || undefined,
       model,
-      systemInstruction: buildTheologySystemInstruction("verse"),
+      systemInstruction: await buildEffectiveTheologySystemInstruction("verse"),
       parts: [{ text: prompt }],
       jsonMode: true,
       temperature: 0.3,

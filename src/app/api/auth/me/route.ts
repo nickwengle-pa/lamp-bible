@@ -8,6 +8,10 @@ import {
   updateAuthSettings,
   updateUserProfile,
 } from "@/lib/auth";
+import {
+  getCustomTheologyNotes,
+  saveCustomTheologyNotes,
+} from "@/lib/theology";
 
 export async function GET(request: Request) {
   try {
@@ -25,11 +29,15 @@ export async function GET(request: Request) {
     };
 
     if (user?.role === "admin") {
-      const members = await listAllProfiles();
+      const [members, theologyNotes] = await Promise.all([
+        listAllProfiles(),
+        getCustomTheologyNotes(),
+      ]);
       return NextResponse.json({
         ...base,
         members,
         inviteCode: authSettings.inviteCode || "",
+        theologyNotes,
       });
     }
 
@@ -51,6 +59,7 @@ export async function PATCH(request: Request) {
       displayName?: string;
       church?: string;
       inviteCode?: string;
+      theologyNotes?: string;
     };
 
     let updatedUser = user;
@@ -68,9 +77,17 @@ export async function PATCH(request: Request) {
       nextInviteCode = saved.inviteCode || "";
     }
 
+    let nextTheologyNotes: string | undefined;
+    if (body.theologyNotes !== undefined && user.role === "admin") {
+      nextTheologyNotes = await saveCustomTheologyNotes(body.theologyNotes);
+    }
+
     return NextResponse.json({
       user: updatedUser,
       ...(nextInviteCode !== undefined ? { inviteCode: nextInviteCode } : {}),
+      ...(nextTheologyNotes !== undefined
+        ? { theologyNotes: nextTheologyNotes }
+        : {}),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Profile update failed";

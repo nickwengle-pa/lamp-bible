@@ -1,3 +1,5 @@
+import { env } from "cloudflare:workers";
+
 /**
  * Lamp AI — Central Theological Charter & Hermeneutical Guardrails
  *
@@ -8,6 +10,45 @@
  *   genuine human responsibility, perseverance in faith — explicitly non-Calvinist)
  * - Historical-Grammatical, Context-Based Hermeneutics
  */
+
+interface VesselKV {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+  delete?(key: string): Promise<void>;
+}
+
+const CUSTOM_THEOLOGY_KV_KEY = "lamp_theology_custom_v1";
+const MAX_CUSTOM_THEOLOGY_CHARS = 4000;
+let memoryCustomTheology = "";
+
+function getKv(): VesselKV | null {
+  const cfEnv = env as unknown as { VESSEL_NOTES?: VesselKV };
+  return cfEnv?.VESSEL_NOTES ?? null;
+}
+
+export async function getCustomTheologyNotes(): Promise<string> {
+  const kv = getKv();
+  if (kv) {
+    const raw = await kv.get(CUSTOM_THEOLOGY_KV_KEY);
+    return (raw || "").trim();
+  }
+  return memoryCustomTheology.trim();
+}
+
+export async function saveCustomTheologyNotes(raw: string): Promise<string> {
+  const cleaned = raw.trim().slice(0, MAX_CUSTOM_THEOLOGY_CHARS);
+  const kv = getKv();
+  if (kv) {
+    if (!cleaned && kv.delete) {
+      await kv.delete(CUSTOM_THEOLOGY_KV_KEY);
+    } else {
+      await kv.put(CUSTOM_THEOLOGY_KV_KEY, cleaned);
+    }
+  } else {
+    memoryCustomTheology = cleaned;
+  }
+  return cleaned;
+}
 
 export type TheologyTaskMode =
   | "verse"
@@ -67,6 +108,19 @@ const MODE_GUIDANCE: Record<TheologyTaskMode, string> = {
     "TASK FOCUS (Scripture Scanner): Transcribe the photographed passage accurately and unpack its historical-grammatical setting, theological core, and practical Spirit-led application.",
 };
 
-export function buildTheologySystemInstruction(mode: TheologyTaskMode): string {
-  return `${LAMP_THEOLOGICAL_CHARTER}\n\n${MODE_GUIDANCE[mode]}`;
+export function buildTheologySystemInstruction(
+  mode: TheologyTaskMode,
+  customChurchNotes?: string
+): string {
+  const extra = customChurchNotes?.trim()
+    ? `\n\n5. CHURCH STATEMENT OF FAITH & OWNER CUSTOM GUARDRAILS\nApply these additional doctrinal notes and emphases faithfully alongside the charter above:\n${customChurchNotes.trim()}`
+    : "";
+  return `${LAMP_THEOLOGICAL_CHARTER}${extra}\n\n${MODE_GUIDANCE[mode]}`;
+}
+
+export async function buildEffectiveTheologySystemInstruction(
+  mode: TheologyTaskMode
+): Promise<string> {
+  const customNotes = await getCustomTheologyNotes();
+  return buildTheologySystemInstruction(mode, customNotes);
 }

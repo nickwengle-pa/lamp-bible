@@ -15,6 +15,7 @@ import {
   User,
   Users,
   LogOut,
+  BookOpen,
 } from "lucide-react";
 import { AppSettings, StudyNote, UserProfile } from "@/lib/types";
 import { BIBLE_TRANSLATIONS } from "@/lib/bible-books";
@@ -29,7 +30,12 @@ interface SettingsModalProps {
   user?: UserProfile | null;
   members?: UserProfile[];
   inviteCode?: string;
-  onProfileUpdated?: (user: UserProfile, nextInviteCode?: string) => void;
+  theologyNotes?: string;
+  onProfileUpdated?: (
+    user: UserProfile,
+    nextInviteCode?: string,
+    nextTheologyNotes?: string
+  ) => void;
   onSignOut?: () => void;
   serverConfig?: {
     hasServerGeminiKey: boolean;
@@ -53,6 +59,7 @@ export default function SettingsModal({
   user,
   members = [],
   inviteCode = "",
+  theologyNotes = "",
   onProfileUpdated,
   onSignOut,
   serverConfig,
@@ -66,12 +73,15 @@ export default function SettingsModal({
     message: string;
   } | null>(null);
 
-  // Profile & Admin Invite state
+  // Profile & Admin Invite / Theology state
   const [profileName, setProfileName] = useState(user?.displayName || "");
   const [profileChurch, setProfileChurch] = useState(user?.church || "");
   const [inviteDraft, setInviteDraft] = useState(inviteCode || "");
+  const [theologyDraft, setTheologyDraft] = useState(theologyNotes || "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
+  const [savingTheology, setSavingTheology] = useState(false);
+  const [theologyMsg, setTheologyMsg] = useState<string | null>(null);
 
   const fetchAvailableModels = React.useCallback(async (cfg: AppSettings) => {
     setLoadingModels(true);
@@ -100,11 +110,39 @@ export default function SettingsModal({
     setProfileName(user?.displayName || "");
     setProfileChurch(user?.church || "");
     setInviteDraft(inviteCode || "");
+    setTheologyDraft(theologyNotes || "");
     setProfileMsg(null);
+    setTheologyMsg(null);
     if (open && user?.role === "admin") {
       fetchAvailableModels(settings);
     }
-  }, [settings, open, user?.id, inviteCode, fetchAvailableModels]);
+  }, [settings, open, user?.id, inviteCode, theologyNotes, fetchAvailableModels]);
+
+  const handleSaveTheology = async () => {
+    if (!user || user.role !== "admin") return;
+    setSavingTheology(true);
+    setTheologyMsg(null);
+    try {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theologyNotes: theologyDraft }),
+      });
+      const data = (await res.json()) as {
+        user?: UserProfile;
+        theologyNotes?: string;
+        error?: string;
+      };
+      if (res.ok && data.user) {
+        onProfileUpdated?.(data.user, undefined, data.theologyNotes ?? theologyDraft);
+        setTheologyMsg("Church doctrinal guardrails saved to Cloudflare!");
+      } else {
+        setTheologyMsg(data.error || "Could not save theology settings.");
+      }
+    } finally {
+      setSavingTheology(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -456,6 +494,43 @@ export default function SettingsModal({
                   placeholder="Optional local override (Cloudflare secret active)"
                   className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
                 />
+              </div>
+
+              {/* Owner-Only Theology & Church Statement of Faith */}
+              <div className="rounded-2xl bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] p-4 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <label className="text-sm font-semibold flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
+                    AI Theology &amp; Church Statement of Faith
+                  </label>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F7EAD0] text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]">
+                    Owner Only
+                  </span>
+                </div>
+                <p className="text-xs text-[#6B635B] dark:text-[#A39A90] leading-relaxed">
+                  <strong>Active Baseline:</strong> Assemblies of God / Classical Pentecostal · Wesleyan-Arminian (Non-Calvinist) · Historical-Grammatical Hermeneutics · Verified Strong&apos;s Grounding.
+                </p>
+                <textarea
+                  rows={4}
+                  maxLength={4000}
+                  value={theologyDraft}
+                  onChange={(e) => setTheologyDraft(e.target.value)}
+                  placeholder="Optional: Paste your church's Statement of Faith, distinctives, or extra study guardrails here. Applied automatically across all AI verse studies, chats, and sermon notes (hidden from regular members)."
+                  className="w-full rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-3 py-2 text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                    {theologyMsg || ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSaveTheology}
+                    disabled={savingTheology}
+                    className="px-3 py-1.5 rounded-xl bg-[#1C1917] hover:bg-[#322C27] dark:bg-[#DFB164] dark:text-[#141210] text-white text-xs font-semibold disabled:opacity-50 transition"
+                  >
+                    {savingTheology ? "Saving..." : "Save Doctrinal Notes"}
+                  </button>
+                </div>
               </div>
             </>
           )}

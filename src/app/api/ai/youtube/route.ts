@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { callGemini, GeminiPart, resolveApiKey, resolveModel } from "@/lib/gemini";
 import { createNote } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth";
-import { buildTheologySystemInstruction } from "@/lib/theology";
+import { buildEffectiveTheologySystemInstruction } from "@/lib/theology";
 import { StudyNote } from "@/lib/types";
 
 const CHUNK_CHAR_LIMIT = 45000;
@@ -239,7 +239,7 @@ ${promptSchema}`;
         aiData = await callGemini<YouTubeAIOutput>({
           apiKey: apiKey || undefined,
           model,
-          systemInstruction: buildTheologySystemInstruction("youtube"),
+          systemInstruction: await buildEffectiveTheologySystemInstruction("youtube"),
           parts,
           jsonMode: true,
           temperature: 0.35,
@@ -251,7 +251,7 @@ ${promptSchema}`;
           const digest = await callGemini<string>({
             apiKey: apiKey || undefined,
             model,
-            systemInstruction: buildTheologySystemInstruction("youtube"),
+            systemInstruction: await buildEffectiveTheologySystemInstruction("youtube"),
             parts: [
               {
                 text: `You are Lamp, summarizing Part ${i + 1} of ${chunks.length} of a long YouTube sermon ("${meta.title || "Sermon"}").
@@ -272,7 +272,7 @@ ${chunks[i]}
         aiData = await callGemini<YouTubeAIOutput>({
           apiKey: apiKey || undefined,
           model,
-          systemInstruction: buildTheologySystemInstruction("youtube"),
+          systemInstruction: await buildEffectiveTheologySystemInstruction("youtube"),
           parts: [
             {
               text: `${baseInstruction}\n\nComplete Section-by-Section Sermon Digest (covering all ${chunks.length} parts from beginning to conclusion):\n"""\n${sectionNotes.join("\n\n")}\n"""`,
@@ -299,7 +299,7 @@ ${chunks[i]}
       aiData = await callGemini<YouTubeAIOutput>({
         apiKey: apiKey || undefined,
         model,
-        systemInstruction: buildTheologySystemInstruction("youtube"),
+        systemInstruction: await buildEffectiveTheologySystemInstruction("youtube"),
         parts,
         jsonMode: true,
         temperature: 0.35,

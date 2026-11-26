@@ -87,6 +87,7 @@ export default function VesselApp() {
   const [ownerSetupRequired, setOwnerSetupRequired] = useState(false);
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [inviteCode, setInviteCode] = useState("");
+  const [theologyNotes, setTheologyNotes] = useState("");
 
   // Live Sermon Recorder background status (kept mounted across tab switches!)
   const [recorderStatus, setRecorderStatus] = useState<{
@@ -133,6 +134,7 @@ export default function VesselApp() {
           ownerSetupRequired?: boolean;
           members?: UserProfile[];
           inviteCode?: string;
+          theologyNotes?: string;
         };
         setUser(data.user);
         setUserCount(data.userCount || 0);
@@ -140,6 +142,7 @@ export default function VesselApp() {
         setOwnerSetupRequired(Boolean(data.ownerSetupRequired));
         setMembers(data.members || []);
         setInviteCode(data.inviteCode || "");
+        setTheologyNotes(data.theologyNotes || "");
       }
     } finally {
       setCheckingAuth(false);
@@ -213,6 +216,9 @@ export default function VesselApp() {
     setSelectedNoteId(null);
     setSettingsOpen(false);
     setMobileMenuOpen(false);
+    setTheologyNotes("");
+    setMembers([]);
+    setInviteCode("");
     const theme = loadThemePreference();
     setSettings({ ...DEFAULT_SETTINGS, theme });
     setRecorderStatus({
@@ -804,9 +810,11 @@ export default function VesselApp() {
         user={user}
         members={members}
         inviteCode={inviteCode}
-        onProfileUpdated={(updatedUser, nextInvite) => {
+        theologyNotes={theologyNotes}
+        onProfileUpdated={(updatedUser, nextInvite, nextTheology) => {
           setUser(updatedUser);
           if (nextInvite !== undefined) setInviteCode(nextInvite);
+          if (nextTheology !== undefined) setTheologyNotes(nextTheology);
           refreshAuth();
         }}
         onSignOut={handleSignOut}
