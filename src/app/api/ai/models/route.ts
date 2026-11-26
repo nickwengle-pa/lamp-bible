@@ -48,6 +48,11 @@ export async function GET(request: Request) {
           !id.includes("embedding") &&
           !id.includes("tts") &&
           !id.includes("imagen") &&
+          !id.includes("image") &&
+          !id.includes("banana") &&
+          !id.includes("robotics") &&
+          !id.includes("computer-use") &&
+          !id.includes("transcribe") &&
           !id.includes("veo") &&
           methods.includes("generateContent")
         );

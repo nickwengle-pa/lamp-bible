@@ -51,6 +51,25 @@ export function resolveModel(request: Request): string {
   return DEFAULT_GEMINI_MODEL;
 }
 
+const FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
+];
+
+function isRetryableOverload(status: number, message: string): boolean {
+  if (status === 429 || status === 503 || status === 500) return true;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("high demand") ||
+    lower.includes("overloaded") ||
+    lower.includes("unavailable") ||
+    lower.includes("resource exhausted")
+  );
+}
+
 export async function callGemini<T = string>(
   options: GeminiRequestOptions
 ): Promise<T> {
@@ -61,10 +80,11 @@ export async function callGemini<T = string>(
     );
   }
 
-  const model = options.model || DEFAULT_GEMINI_MODEL;
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const primaryModel = options.model || DEFAULT_GEMINI_MODEL;
+  const candidates = [
+    primaryModel,
+    ...FALLBACK_MODELS.filter((m) => m !== primaryModel),
+  ];
 
   const body: Record<string, unknown> = {
     contents: [
@@ -85,19 +105,40 @@ export async function callGemini<T = string>(
     };
   }
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const serializedBody = JSON.stringify(body);
+  let lastError = "Gemini API request failed.";
+  let payload: any = null;
 
-  const payload = await response.json().catch(() => null);
+  for (const model of candidates) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      model
+    )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-  if (!response.ok) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: serializedBody,
+    });
+
+    const json = await response.json().catch(() => null);
+
+    if (response.ok) {
+      payload = json;
+      break;
+    }
+
     const errMsg =
-      payload?.error?.message ||
+      json?.error?.message ||
       `Gemini API error (${response.status}): ${response.statusText}`;
-    throw new Error(errMsg);
+    lastError = errMsg;
+
+    if (!isRetryableOverload(response.status, errMsg)) {
+      throw new Error(errMsg);
+    }
+  }
+
+  if (!payload) {
+    throw new Error(lastError);
   }
 
   const text: string | undefined =
