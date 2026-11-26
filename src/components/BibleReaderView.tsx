@@ -21,6 +21,8 @@ import {
   Mic,
   Share2,
   Volume2,
+  Star,
+  Bookmark,
 } from "lucide-react";
 import {
   AppSettings,
@@ -167,9 +169,11 @@ export default function BibleReaderView({
   const [wordLexicon, setWordLexicon] = useState<LexiconEntry | null>(null);
   const [loadingLexicon, setLoadingLexicon] = useState(false);
 
-  // Cross-link saved sermons/studies referencing this chapter!
-  const relatedNotes = React.useMemo(() => {
+  // Cross-link saved sermons/studies referencing this chapter & map to specific verses!
+  const { relatedNotes, verseStudyMap } = React.useMemo(() => {
     const matched: { note: StudyNote; verse?: number; reference: string }[] = [];
+    const byVerse = new Map<number, StudyNote[]>();
+
     for (const n of notes) {
       for (const ref of n.scriptureReferences || []) {
         const parsed = parseScriptureReference(ref.reference);
@@ -177,11 +181,22 @@ export default function BibleReaderView({
           if (!matched.some((m) => m.note.id === n.id)) {
             matched.push({ note: n, verse: parsed.verse, reference: ref.reference });
           }
+          const targetVerse = parsed.verse ?? 1;
+          const existing = byVerse.get(targetVerse) || [];
+          if (!existing.some((item) => item.id === n.id)) {
+            byVerse.set(targetVerse, [...existing, n]);
+          }
         }
       }
     }
-    return matched;
+    return { relatedNotes: matched, verseStudyMap: byVerse };
   }, [notes, book, chapter]);
+
+  const chapterHasNotes = React.useMemo(() => {
+    return Object.values(highlights).some(
+      (h) => h.book === book && h.chapter === chapter && Boolean(h.note)
+    );
+  }, [highlights, book, chapter]);
 
   // Sync external navigation (from Library or Scanner!)
   useEffect(() => {
@@ -579,9 +594,23 @@ export default function BibleReaderView({
               <h1 className="font-serif text-3xl sm:text-4xl font-semibold">
                 {book} {chapter}
               </h1>
-              <p className="text-xs text-[#6B635B] dark:text-[#A39A90] mt-1">
-                {chapterData?.translation_name || translation.toUpperCase()} · Tap any verse to highlight, add notes, or get AI insight
-              </p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6B635B] dark:text-[#A39A90] mt-1">
+                <span>
+                  {chapterData?.translation_name || translation.toUpperCase()} · Tap any verse to highlight, add notes, or study
+                </span>
+                {(chapterHasNotes || verseStudyMap.size > 0) && (
+                  <span className="inline-flex items-center gap-2.5 text-[11px] font-medium">
+                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                      Note
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                      <Bookmark className="w-3 h-3 fill-emerald-500/80 text-emerald-600 dark:text-emerald-400" />
+                      Study
+                    </span>
+                  </span>
+                )}
+              </div>
             </div>
             <Sparkles className="w-5 h-5 text-[#B88435]/70" />
           </div>
@@ -635,6 +664,8 @@ export default function BibleReaderView({
                 const isHighlighted = activeHighlight === v.verse;
                 const vKey = `${v.book_name}:${v.chapter}:${v.verse}`;
                 const savedHl = highlights[vKey];
+                const hasNote = Boolean(savedHl?.note);
+                const verseStudies = verseStudyMap.get(v.verse) || [];
                 return (
                   <button
                     key={v.verse}
@@ -646,8 +677,22 @@ export default function BibleReaderView({
                         : "hover:bg-[#FAF5EB]/70 dark:hover:bg-[#25211C]/60"
                     }`}
                   >
-                    <sup className="font-sans text-xs font-bold text-[#9A6B24] dark:text-[#DFB164] mr-2 select-none">
-                      {v.verse}
+                    <sup className="font-sans text-xs font-bold text-[#9A6B24] dark:text-[#DFB164] mr-1.5 select-none inline-flex items-center gap-0.5 align-super">
+                      <span>{v.verse}</span>
+                      {hasNote && (
+                        <span title={`Personal note: ${savedHl?.note}`}>
+                          <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-500 inline" />
+                        </span>
+                      )}
+                      {verseStudies.length > 0 && (
+                        <span
+                          title={`Saved study: ${verseStudies
+                            .map((s) => s.title)
+                            .join(", ")}`}
+                        >
+                          <Bookmark className="w-2.5 h-2.5 fill-emerald-500/85 text-emerald-600 dark:text-emerald-400 inline" />
+                        </span>
+                      )}
                     </sup>
                     <span
                       className={
@@ -755,6 +800,28 @@ export default function BibleReaderView({
               <blockquote className="font-serif italic text-base leading-relaxed pl-3.5 border-l-2 border-[#B88435] text-[#3F3A35] dark:text-[#DED6CB]">
                 &ldquo;{selectedVerse.text.trim()}&rdquo;
               </blockquote>
+
+              {/* Linked Studies on this specific verse */}
+              {(verseStudyMap.get(selectedVerse.verse) || []).length > 0 && (
+                <div className="rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 p-3 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                    <Bookmark className="w-3 h-3 fill-emerald-500/80" />
+                    Saved Studies on This Verse
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(verseStudyMap.get(selectedVerse.verse) || []).map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => onOpenLibraryNote(st.id)}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1D1A17] border border-emerald-200 dark:border-emerald-900 text-xs font-medium text-emerald-900 dark:text-emerald-200 hover:underline"
+                      >
+                        {st.title} →
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Highlight Color Swatches & Margin Note */}
               {(() => {
