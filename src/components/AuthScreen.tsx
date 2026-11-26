@@ -29,6 +29,9 @@ export default function AuthScreen({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setBusy(true);
     setError(null);
 
@@ -62,10 +65,10 @@ export default function AuthScreen({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210] px-4 py-10">
-      <div className="w-full max-w-md rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-7 sm:p-9 shadow-xl space-y-6">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210] px-4 py-8 sm:py-10">
+      <div className="w-full max-w-md rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-6 sm:p-9 shadow-xl space-y-6">
         <div className="flex flex-col items-center text-center">
-          <LampTitleLockup size="lg" subtitle="BIBLE STUDY & WORD NOTES" />
+          <LampTitleLockup size="md" subtitle="BIBLE STUDY & WORD NOTES" />
           <p className="font-serif italic text-sm text-[#6B635B] dark:text-[#A39A90] mt-3">
             &ldquo;Your word is a lamp to my feet and a light to my path.&rdquo; — Psalm 119:105
           </p>
@@ -133,7 +136,7 @@ export default function AuthScreen({
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="e.g. Nick"
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
                 />
               </div>
             </div>
@@ -151,7 +154,7 @@ export default function AuthScreen({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
               />
             </div>
           </div>
@@ -169,7 +172,7 @@ export default function AuthScreen({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
               />
             </div>
           </div>
@@ -186,7 +189,7 @@ export default function AuthScreen({
                   value={church}
                   onChange={(e) => setChurch(e.target.value)}
                   placeholder="e.g. Grace Community Church"
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
                 />
               </div>
             </div>
@@ -205,7 +208,7 @@ export default function AuthScreen({
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   placeholder="Enter group invite code"
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#141210] text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
                 />
               </div>
             </div>

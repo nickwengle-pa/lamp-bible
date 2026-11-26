@@ -15,6 +15,15 @@
     overflow-x: clip;
     max-width: 100%;
   }
+
+  /* Prevent iOS Safari / Home Screen WebView from auto-zooming in when tapping inputs or selects */
+  @media screen and (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 /* Custom subtle scrollbars */
