@@ -1,12 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="lampFlameGrad" x1="64" y1="22" x2="64" y2="74" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F2CC7E"/>
+      <stop offset="55%" stop-color="#DFAD52"/>
+      <stop offset="100%" stop-color="#BA8632"/>
+    </linearGradient>
+  </defs>
+  <!-- Deep Espresso Rounded App/Tab Badge -->
   <rect width="128" height="128" rx="28" fill="#1C1917"/>
-  <!-- Glowing warm oil lamp flame -->
-  <path d="M88 30C88 30 98 41 98 49C98 54.8 93.5 59 88 59C82.5 59 78 54.8 78 49C78 41 88 30 88 30Z" fill="#E8B968"/>
-  <path d="M88 41C88 41 93 46.5 93 50.5C93 53.5 90.8 55.8 88 55.8C85.2 55.8 83 53.5 83 50.5C83 46.5 88 41 88 41Z" fill="#FFF7E2"/>
-  <!-- Ancient Judean clay oil lamp body -->
-  <path d="M32 71C32 62.5 41 58 55 58H72C80 58 88 61 95 66L86 76C80 82 72 86 60 86H47C38 86 32 80 32 71Z" stroke="#E0B166" stroke-width="5" stroke-linejoin="round"/>
-  <!-- Lamp handle -->
-  <path d="M34 68C25 68 22 61 25 55C28 49 36 51 39 58" stroke="#E0B166" stroke-width="4.5" stroke-linecap="round"/>
-  <!-- Base & subtle light beam -->
-  <path d="M44 95H74" stroke="#FAF7F2" stroke-width="4.5" stroke-linecap="round" opacity="0.85"/>
+  <!-- Rising Golden Flame with Inner Hollow Cutout -->
+  <path fill-rule="evenodd" clip-rule="evenodd"
+    d="M62.8 22.5C65.4 28.5 76.2 38.6 77.2 50.8C78.1 61.5 72.1 69.5 64 73.2C55.9 69.5 49.8 61.2 51.1 50.5C52.2 41.2 60.8 33.4 62.8 22.5ZM64 46.8C60.5 52.8 57.8 57.6 58.6 63.1C59.3 67.6 62.1 70.6 64 72.4C65.9 70.6 68.7 67.6 69.4 63.1C70.2 57.6 67.5 52.8 64 46.8Z"
+    fill="url(#lampFlameGrad)"/>
+  <!-- Upper Open Bible Pages (Left & Right Cradling Wings) -->
+  <path d="M51 50.5C44.5 48.2 37.5 47.4 31.2 47.8L17.5 74.2C32.2 74.4 47.8 79.4 64 91.2C80.2 79.4 95.8 74.4 110.5 74.2L96.8 47.8C90.5 47.4 83.5 48.2 77 50.5L78.4 53.5C83.5 52.4 88.6 52.3 93.4 53.1L102.6 70.1C89.5 71.1 75.8 75.5 64 85.2C52.2 75.5 38.5 71.1 25.4 70.1L34.6 53.1C39.4 52.3 44.5 52.4 49.6 53.5L51 50.5Z"
+    fill="#FAF6EE"/>
+  <!-- Lower Open Bible Cover & Spine Base -->
+  <path d="M18.8 79.2C34.2 79.2 49.8 84.2 61.2 94.8C62.8 96.3 65.2 96.3 66.8 94.8C78.2 84.2 93.8 79.2 109.2 79.2L112.8 86.2C96.8 86.2 81.4 90.6 70.4 99.6C66.6 102.7 61.4 102.7 57.6 99.6C46.6 90.6 31.2 86.2 15.2 86.2L18.8 79.2Z"
+    fill="#FAF6EE"/>
 </svg>

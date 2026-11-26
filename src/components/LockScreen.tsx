@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Lock, Loader2, AlertCircle } from "lucide-react";
+import { LampTitleLockup } from "./LampBrand";
 
 interface LockScreenProps {
   onUnlocked: (rememberDevice: boolean) => void;
@@ -44,8 +45,8 @@ export default function LockScreen({ onUnlocked }: LockScreenProps) {
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] p-8 shadow-xl text-center space-y-5"
       >
-        <div className="mx-auto flex items-center justify-center gap-2.5">
-          <img src="/icon.svg" alt="Lamp" className="w-10 h-10 rounded-xl shadow-sm" />
+        <div className="mx-auto flex items-center justify-center">
+          <LampTitleLockup size="md" subtitle="PSALM 119:105" />
         </div>
 
         <div>

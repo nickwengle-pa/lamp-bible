@@ -31,6 +31,7 @@ import ScriptureScannerView from "./ScriptureScannerView";
 import WordStudyView from "./WordStudyView";
 import SettingsModal from "./SettingsModal";
 import LockScreen from "./LockScreen";
+import { LampMark, LampTitleLockup } from "./LampBrand";
 
 type ActiveTab = "library" | "words" | "record" | "youtube" | "bible" | "scan";
 
@@ -255,7 +256,7 @@ export default function VesselApp() {
   if (checkingLock) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FAF7F2] dark:bg-[#141210]">
-        <img src="/icon.svg" alt="Lamp" className="w-10 h-10 rounded-xl animate-pulse" />
+        <LampMark className="w-12 h-10 text-[#1C1917] dark:text-[#F5F0E8] animate-pulse" />
       </div>
     );
   }
@@ -284,16 +285,8 @@ export default function VesselApp() {
       <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 bg-[#F5EFE5] dark:bg-[#191613] border-r border-[#E6DCCB] dark:border-[#2A2520] px-4 py-6 justify-between">
         <div>
           {/* Brand */}
-          <div className="flex items-center gap-3 px-2 mb-8">
-            <img src="/icon.svg" alt="Lamp Logo" className="w-9 h-9 rounded-xl shadow-sm" />
-            <div>
-              <span className="font-serif text-2xl font-semibold tracking-tight block leading-none">
-                Lamp
-              </span>
-              <span className="text-[11px] text-[#786F66] dark:text-[#9C9288]">
-                Psalm 119:105 · Word & Notes
-              </span>
-            </div>
+          <div className="px-1.5 mb-8">
+            <LampTitleLockup size="md" subtitle="BIBLE STUDY & WORD NOTES" />
           </div>
 
           {/* Nav Links */}
@@ -394,11 +387,8 @@ export default function VesselApp() {
       </aside>
 
       {/* Mobile Top Header */}
-      <header className="lg:hidden sticky top-0 z-30 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <img src="/icon.svg" alt="Lamp Logo" className="w-7 h-7 rounded-lg" />
-          <span className="font-serif text-xl font-semibold">Lamp</span>
-        </div>
+      <header className="lg:hidden sticky top-0 z-30 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] px-4 py-2.5 flex items-center justify-between">
+        <LampTitleLockup size="sm" subtitle="PSALM 119:105" />
 
         <div className="flex items-center gap-1.5">
           {lockEnabled && (

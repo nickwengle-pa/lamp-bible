@@ -20,8 +20,9 @@ export const metadata: Metadata = {
     "Your word is a lamp to my feet (Psalm 119:105). Read Scripture with Hebrew & Greek interlinear word studies, record sermons, summarize YouTube teachings, and scan printed Bible pages.",
   manifest: "/manifest.json",
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
+    icon: [{ url: "/icon.svg?v=2", type: "image/svg+xml" }],
+    shortcut: "/icon.svg?v=2",
+    apple: "/icon.svg?v=2",
   },
 };
 
