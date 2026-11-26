@@ -18,6 +18,7 @@ export async function POST(request: Request) {
       model,
       parts: [{ text: "Reply with exactly: OK" }],
       temperature: 0,
+      timeoutMs: 10000,
     });
 
     return NextResponse.json({ ok: true, model, reply: reply.trim() });

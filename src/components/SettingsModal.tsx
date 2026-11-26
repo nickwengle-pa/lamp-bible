@@ -30,7 +30,9 @@ interface SettingsModalProps {
 }
 
 const FALLBACK_GEMINI_MODELS = [
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash (Recommended)" },
+  { id: "gemini-flash-lite-latest", label: "Gemini Flash-Lite Latest (Recommended — Fast)" },
+  { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite" },
+  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
 ];
 
 export default function SettingsModal({

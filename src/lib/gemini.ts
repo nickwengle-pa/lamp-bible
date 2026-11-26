@@ -19,6 +19,7 @@ export interface GeminiRequestOptions {
   parts: GeminiPart[];
   jsonMode?: boolean;
   temperature?: number;
+  timeoutMs?: number;
 }
 
 export function resolveApiKey(request: Request): string | null {
@@ -40,7 +41,7 @@ const DEPRECATED_MODELS = new Set([
   "gemini-1.5-pro",
 ]);
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-flash-lite-latest";
 
 export function resolveModel(request: Request): string {
   const headerModel = request.headers.get("x-gemini-model")?.trim();
@@ -52,11 +53,10 @@ export function resolveModel(request: Request): string {
 }
 
 const FALLBACK_MODELS = [
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite",
   "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
   "gemini-3.5-flash",
-  "gemini-flash-latest",
 ];
 
 function isRetryableOverload(status: number, message: string): boolean {
@@ -106,6 +106,7 @@ export async function callGemini<T = string>(
   }
 
   const serializedBody = JSON.stringify(body);
+  const perAttemptTimeout = options.timeoutMs ?? 25000;
   let lastError = "Gemini API request failed.";
   let payload: any = null;
 
@@ -114,26 +115,40 @@ export async function callGemini<T = string>(
       model
     )}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: serializedBody,
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: serializedBody,
+        signal: AbortSignal.timeout(perAttemptTimeout),
+      });
 
-    const json = await response.json().catch(() => null);
+      const json = await response.json().catch(() => null);
 
-    if (response.ok) {
-      payload = json;
-      break;
-    }
+      if (response.ok) {
+        payload = json;
+        break;
+      }
 
-    const errMsg =
-      json?.error?.message ||
-      `Gemini API error (${response.status}): ${response.statusText}`;
-    lastError = errMsg;
+      const errMsg =
+        json?.error?.message ||
+        `Gemini API error (${response.status}): ${response.statusText}`;
+      lastError = errMsg;
 
-    if (!isRetryableOverload(response.status, errMsg)) {
-      throw new Error(errMsg);
+      if (!isRetryableOverload(response.status, errMsg)) {
+        throw new Error(errMsg);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTimeout =
+        (err instanceof Error && err.name === "TimeoutError") ||
+        msg.toLowerCase().includes("aborted") ||
+        msg.toLowerCase().includes("timed out");
+      if (isTimeout) {
+        lastError = `${model} timed out under high demand`;
+        continue;
+      }
+      throw err;
     }
   }
 

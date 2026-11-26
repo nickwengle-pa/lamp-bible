@@ -4,7 +4,7 @@ const SETTINGS_KEY = "vessel_app_settings_v1";
 
 export const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: "",
-  geminiModel: "gemini-3.8-flash",
+  geminiModel: "gemini-flash-lite-latest",
   esvApiKey: "",
   defaultTranslation: "esv",
   theme: "light",
