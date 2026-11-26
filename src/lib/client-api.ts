@@ -6,7 +6,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   geminiApiKey: "",
   geminiModel: "gemini-3.8-flash",
   esvApiKey: "",
-  defaultTranslation: "bsb",
+  defaultTranslation: "esv",
   theme: "light",
 };
 

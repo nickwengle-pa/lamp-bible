@@ -72,12 +72,12 @@ export const BIBLE_BOOKS: BibleBook[] = [
 ];
 
 export const BIBLE_TRANSLATIONS = [
-  { id: "bsb", name: "Berean Standard Bible (BSB — Modern, Free)", short: "BSB" },
+  { id: "esv", name: "English Standard Version (ESV)", short: "ESV" },
+  { id: "bsb", name: "Berean Standard Bible (BSB)", short: "BSB" },
   { id: "web", name: "World English Bible (WEB)", short: "WEB" },
   { id: "kjv", name: "King James Version (KJV)", short: "KJV" },
   { id: "asv", name: "American Standard Version (ASV)", short: "ASV" },
   { id: "bbe", name: "Bible in Basic English (BBE)", short: "BBE" },
-  { id: "esv", name: "English Standard Version (ESV — Requires Token)", short: "ESV" },
 ];
 
 export function parseScriptureReference(ref: string): {
