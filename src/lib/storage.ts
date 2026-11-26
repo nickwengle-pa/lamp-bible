@@ -1,9 +1,12 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { env } from "cloudflare:workers";
 import { StudyNote } from "./types";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const NOTES_FILE = path.join(DATA_DIR, "library.json");
+interface VesselKV {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+}
+
+const NOTES_KV_KEY = "vessel_library_notes_v1";
 
 const STARTER_NOTES: StudyNote[] = [
   {
@@ -12,8 +15,8 @@ const STARTER_NOTES: StudyNote[] = [
     sourceType: "sermon",
     speaker: "Sample Study Note",
     churchOrChannel: "Vessel Starter Library",
-    createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    createdAt: "2026-11-24T15:00:00.000Z",
+    updatedAt: "2026-11-24T15:00:00.000Z",
     pinned: true,
     tags: ["John 15", "Spiritual Growth", "Grace"],
     summary:
@@ -73,23 +76,50 @@ const STARTER_NOTES: StudyNote[] = [
       "Could a current frustration or limitation actually be a season of gentle pruning?",
     ],
     personalNotes:
-      "Tip: You can edit these personal notes anytime, check off takeaways, or delete this sample note once you record your own sermons!",
+      "Tip: Your notes sync automatically via Cloudflare KV! You can edit these reflections, check off takeaways, or delete this sample note anytime.",
   },
 ];
 
-async function ensureStore(): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  try {
-    await fs.access(NOTES_FILE);
-  } catch {
-    await fs.writeFile(NOTES_FILE, JSON.stringify(STARTER_NOTES, null, 2), "utf-8");
+// Fallback in-memory array only if KV binding is unavailable
+let memoryNotes: StudyNote[] | null = null;
+
+function getKv(): VesselKV | null {
+  const cfEnv = env as unknown as { VESSEL_NOTES?: VesselKV };
+  return cfEnv?.VESSEL_NOTES ?? null;
+}
+
+async function readNotes(): Promise<StudyNote[]> {
+  const kv = getKv();
+  if (kv) {
+    const raw = await kv.get(NOTES_KV_KEY);
+    if (!raw) {
+      await kv.put(NOTES_KV_KEY, JSON.stringify(STARTER_NOTES));
+      return [...STARTER_NOTES];
+    }
+    try {
+      return JSON.parse(raw) as StudyNote[];
+    } catch {
+      return [...STARTER_NOTES];
+    }
   }
+
+  if (!memoryNotes) {
+    memoryNotes = [...STARTER_NOTES];
+  }
+  return [...memoryNotes];
+}
+
+async function writeNotes(notes: StudyNote[]): Promise<void> {
+  const kv = getKv();
+  if (kv) {
+    await kv.put(NOTES_KV_KEY, JSON.stringify(notes));
+    return;
+  }
+  memoryNotes = [...notes];
 }
 
 export async function getAllNotes(): Promise<StudyNote[]> {
-  await ensureStore();
-  const raw = await fs.readFile(NOTES_FILE, "utf-8");
-  const notes = JSON.parse(raw) as StudyNote[];
+  const notes = await readNotes();
   return notes.sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
@@ -98,14 +128,14 @@ export async function getAllNotes(): Promise<StudyNote[]> {
 }
 
 export async function getNoteById(id: string): Promise<StudyNote | undefined> {
-  const notes = await getAllNotes();
+  const notes = await readNotes();
   return notes.find((n) => n.id === id);
 }
 
 export async function createNote(note: StudyNote): Promise<StudyNote> {
-  const notes = await getAllNotes();
+  const notes = await readNotes();
   notes.unshift(note);
-  await fs.writeFile(NOTES_FILE, JSON.stringify(notes, null, 2), "utf-8");
+  await writeNotes(notes);
   return note;
 }
 
@@ -113,7 +143,7 @@ export async function updateNote(
   id: string,
   updates: Partial<StudyNote>
 ): Promise<StudyNote | null> {
-  const notes = await getAllNotes();
+  const notes = await readNotes();
   const idx = notes.findIndex((n) => n.id === id);
   if (idx === -1) return null;
   notes[idx] = {
@@ -122,14 +152,14 @@ export async function updateNote(
     id: notes[idx].id,
     updatedAt: new Date().toISOString(),
   };
-  await fs.writeFile(NOTES_FILE, JSON.stringify(notes, null, 2), "utf-8");
+  await writeNotes(notes);
   return notes[idx];
 }
 
 export async function deleteNote(id: string): Promise<boolean> {
-  const notes = await getAllNotes();
+  const notes = await readNotes();
   const filtered = notes.filter((n) => n.id !== id);
   if (filtered.length === notes.length) return false;
-  await fs.writeFile(NOTES_FILE, JSON.stringify(filtered, null, 2), "utf-8");
+  await writeNotes(filtered);
   return true;
 }

@@ -1,3 +1,5 @@
+import { env } from "cloudflare:workers";
+
 export interface GeminiPart {
   text?: string;
   inlineData?: {
@@ -22,6 +24,9 @@ export interface GeminiRequestOptions {
 export function resolveApiKey(request: Request): string | null {
   const headerKey = request.headers.get("x-gemini-api-key")?.trim();
   if (headerKey) return headerKey;
+  const cfEnv = env as unknown as Record<string, string | undefined>;
+  const cfKey = cfEnv?.GEMINI_API_KEY?.trim();
+  if (cfKey) return cfKey;
   const envKey = process.env.GEMINI_API_KEY?.trim();
   if (envKey) return envKey;
   return null;
@@ -30,7 +35,8 @@ export function resolveApiKey(request: Request): string | null {
 export function resolveModel(request: Request): string {
   const headerModel = request.headers.get("x-gemini-model")?.trim();
   if (headerModel) return headerModel;
-  return process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
+  const cfEnv = env as unknown as Record<string, string | undefined>;
+  return cfEnv?.GEMINI_MODEL?.trim() || process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
 }
 
 export async function callGemini<T = string>(

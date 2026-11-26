@@ -21,7 +21,6 @@ export async function GET(request: Request) {
 
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 86400 },
     });
 
     if (!res.ok) {
