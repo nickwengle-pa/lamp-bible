@@ -17,6 +17,7 @@ import {
   LogOut,
   BookOpen,
   Trash2,
+  PlayCircle,
 } from "lucide-react";
 import { AppSettings, StudyNote, UserProfile } from "@/lib/types";
 import { BIBLE_TRANSLATIONS } from "@/lib/bible-books";
@@ -39,6 +40,7 @@ interface SettingsModalProps {
     nextTheologyNotes?: string
   ) => void;
   onMembersChanged?: (members: UserProfile[]) => void;
+  onOpenGuide?: () => void;
   onSignOut?: () => void;
   serverConfig?: {
     hasServerGeminiKey: boolean;
@@ -66,6 +68,7 @@ export default function SettingsModal({
   googleAuthEnabled = false,
   onProfileUpdated,
   onMembersChanged,
+  onOpenGuide,
   onSignOut,
   serverConfig,
 }: SettingsModalProps) {
@@ -676,6 +679,32 @@ export default function SettingsModal({
               </button>
             </div>
           </div>
+
+          {/* Beginner's Guide & Feature Walkthrough (Available to All Users) */}
+          {onOpenGuide && (
+            <div className="rounded-2xl bg-[#FAF4E8]/85 dark:bg-[#251E15] border border-[#E5CCA0] dark:border-[#4A3A22] p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] flex items-center gap-1.5">
+                  <PlayCircle className="w-4 h-4 text-[#9A6B24] dark:text-[#DFB164]" />
+                  Lamp Beginner&apos;s Guide
+                </p>
+                <p className="text-xs text-[#6B635B] dark:text-[#BDB4AA] mt-0.5">
+                  Interactive 7-screen walkthrough of every feature &amp; examples
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenGuide();
+                }}
+                className="px-3.5 py-2 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] text-white text-xs font-semibold shrink-0 inline-flex items-center gap-1.5 transition"
+              >
+                <PlayCircle className="w-3.5 h-3.5" />
+                Watch Guide
+              </button>
+            </div>
+          )}
 
           {/* Backup */}
           <div className="pt-2 border-t border-[#E6DCCB] dark:border-[#2F2A24] flex items-center justify-between">

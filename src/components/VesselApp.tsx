@@ -40,6 +40,7 @@ import BibleReaderView from "./BibleReaderView";
 import ScriptureScannerView from "./ScriptureScannerView";
 import WordStudyView from "./WordStudyView";
 import SettingsModal from "./SettingsModal";
+import OnboardingGuideModal from "./OnboardingGuideModal";
 import AuthScreen from "./AuthScreen";
 import { LampMark, LampTitleLockup } from "./LampBrand";
 
@@ -63,6 +64,7 @@ export default function VesselApp() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("library");
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [notes, setNotes] = useState<StudyNote[]>([]);
@@ -117,12 +119,34 @@ export default function VesselApp() {
       const scoped = loadSettings(user.id, user.role);
       setSettings(scoped);
       document.documentElement.classList.toggle("dark", scoped.theme === "dark");
+
+      // Show interactive Beginner's Guide automatically on a user's first login on this device
+      try {
+        const seenKey = `lamp_guide_seen_v1_${user.id}`;
+        if (!window.localStorage.getItem(seenKey)) {
+          setGuideOpen(true);
+        }
+      } catch {
+        // ignore storage errors
+      }
     } else {
       const theme = loadThemePreference();
       setSettings({ ...DEFAULT_SETTINGS, theme });
       document.documentElement.classList.toggle("dark", theme === "dark");
+      setGuideOpen(false);
     }
   }, [user?.id, user?.role]);
+
+  const handleCloseGuide = useCallback(() => {
+    setGuideOpen(false);
+    if (user) {
+      try {
+        window.localStorage.setItem(`lamp_guide_seen_v1_${user.id}`, "1");
+      } catch {
+        // ignore
+      }
+    }
+  }, [user]);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -823,8 +847,19 @@ export default function VesselApp() {
           refreshAuth();
         }}
         onMembersChanged={(nextMembers) => setMembers(nextMembers)}
+        onOpenGuide={() => setGuideOpen(true)}
         onSignOut={handleSignOut}
         serverConfig={serverConfig}
+      />
+
+      {/* Interactive First-Login & Settings Beginner's Guide */}
+      <OnboardingGuideModal
+        open={guideOpen}
+        onClose={handleCloseGuide}
+        onNavigateFeature={(tab) => {
+          setActiveTab(tab);
+          if (tab === "library") setSelectedNoteId(null);
+        }}
       />
     </div>
   );
