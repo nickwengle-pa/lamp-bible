@@ -15,19 +15,34 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  applicationName: "Lamp",
   title: "Lamp — Bible Word Study & Sermon Notes",
   description:
     "Your word is a lamp to my feet (Psalm 119:105). Read Scripture with Hebrew & Greek interlinear word studies, record sermons, summarize YouTube teachings, and scan printed Bible pages.",
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=3",
+  appleWebApp: {
+    capable: true,
+    title: "Lamp",
+    statusBarStyle: "default",
+  },
   icons: {
-    icon: [{ url: "/icon.svg?v=2", type: "image/svg+xml" }],
-    shortcut: "/icon.svg?v=2",
-    apple: "/icon.svg?v=2",
+    icon: [
+      { url: "/icon.svg?v=3", type: "image/svg+xml" },
+      { url: "/favicon-32.png?v=3", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png?v=3", sizes: "192x192", type: "image/png" },
+    ],
+    shortcut: "/favicon-32.png?v=3",
+    apple: [
+      { url: "/apple-touch-icon.png?v=3", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#9A6B24",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FAF7F2" },
+    { media: "(prefers-color-scheme: dark)", color: "#141210" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
