@@ -230,7 +230,7 @@ const TESTS = [
   },
 ];
 
-async function askGemini(apiKey, model, systemInstruction, question) {
+async function askGemini(apiKey, model, systemInstruction, question, attempt = 0) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -256,6 +256,13 @@ async function askGemini(apiKey, model, systemInstruction, question) {
   });
 
   const json = await res.json();
+  if (res.status === 429 && attempt < 2) {
+    // Respect Google AI Studio free-tier RPM limit cleanly
+    const retryMatch = String(json?.error?.message || "").match(/retry in ([\d.]+)s/i);
+    const waitMs = retryMatch ? Math.ceil(parseFloat(retryMatch[1]) * 1000) + 500 : 12000;
+    await new Promise((r) => setTimeout(r, waitMs));
+    return askGemini(apiKey, model, systemInstruction, question, attempt + 1);
+  }
   if (!res.ok) {
     throw new Error(json?.error?.message || `HTTP ${res.status}`);
   }
@@ -292,16 +299,27 @@ async function main() {
 
   const args = process.argv.slice(2);
   const sampleIdx = args.indexOf("--sample");
+  const idsIdx = args.indexOf("--ids");
   const sampleCount =
     sampleIdx !== -1 ? parseInt(args[sampleIdx + 1] || "6", 10) : TESTS.length;
 
-  const selected =
-    sampleCount < TESTS.length
-      ? [TESTS[0], TESTS[5], TESTS[7], TESTS[10], TESTS[15], TESTS[21]].slice(
-          0,
-          Math.max(1, sampleCount)
-        )
-      : TESTS;
+  let selected;
+  if (idsIdx !== -1 && args[idsIdx + 1]) {
+    const idSet = new Set(
+      args[idsIdx + 1]
+        .split(",")
+        .map((n) => parseInt(n.trim(), 10))
+        .filter(Boolean)
+    );
+    selected = TESTS.filter((t) => idSet.has(t.id));
+  } else if (sampleCount < TESTS.length) {
+    selected = [TESTS[0], TESTS[5], TESTS[7], TESTS[10], TESTS[15], TESTS[21]].slice(
+      0,
+      Math.max(1, sampleCount)
+    );
+  } else {
+    selected = TESTS;
+  }
 
   const charter = loadCharterFromSource();
   console.log(
@@ -309,7 +327,12 @@ async function main() {
   );
 
   let passed = 0;
-  for (const test of selected) {
+  for (let i = 0; i < selected.length; i++) {
+    const test = selected[i];
+    if (i > 0 && selected.length > 10) {
+      // Pace full-suite runs under the 15 RPM free-tier limit
+      await new Promise((r) => setTimeout(r, 4200));
+    }
     try {
       const answer = await askGemini(apiKey, model, charter, test.question);
       const { pass, failures } = evaluateResponse(test, answer);
