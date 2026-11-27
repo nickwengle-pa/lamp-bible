@@ -120,7 +120,7 @@ export default function ShareVerseModal({
     // Lamp footer watermark
     ctx.font = "500 22px system-ui, -apple-system, sans-serif";
     ctx.fillStyle = palette.sub;
-    ctx.fillText("LAMP  ·  PSALM 119:105", W / 2, H - 110);
+    ctx.fillText("LAMP119.APP  ·  PSALM 119:105", W / 2, H - 110);
   }, [open, style, reference, verseText, translation]);
 
   if (!open) return null;

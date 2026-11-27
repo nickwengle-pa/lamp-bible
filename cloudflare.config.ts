@@ -7,6 +7,7 @@ export default defineConfig({
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-11-26",
     compatibilityFlags: ["nodejs_compat"],
+    domains: ["lamp119.app", "www.lamp119.app"],
     assets: {
       htmlHandling: "none",
       notFoundHandling: "none",

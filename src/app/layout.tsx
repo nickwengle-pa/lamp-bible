@@ -15,6 +15,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://lamp119.app"),
   applicationName: "Lamp",
   title: "Lamp — Bible Word Study & Sermon Notes",
   description:
