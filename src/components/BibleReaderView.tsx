@@ -5,6 +5,8 @@ import {
   BookOpen,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Sparkles,
   Loader2,
   X,
@@ -169,6 +171,19 @@ export default function BibleReaderView({
   const [insightError, setInsightError] = useState<string | null>(null);
   const [savedVerseSuccess, setSavedVerseSuccess] = useState(false);
 
+  // Mobile swipeable Verse Study sheet state (swipe down to hide, swipe up or tap tab to reopen)
+  const [sheetMinimized, setSheetMinimized] = useState(false);
+  const [sheetDragY, setSheetDragY] = useState(0);
+  const [isDraggingSheet, setIsDraggingSheet] = useState(false);
+  const sheetTouchRef = useRef<{
+    startY: number;
+    startTime: number;
+    mode: "collapse" | "expand";
+    fromScrollBody?: boolean;
+    engaged?: boolean;
+  } | null>(null);
+  const sheetScrollRef = useRef<HTMLDivElement | null>(null);
+
   // Word-by-Word Interlinear & Strong's Lexicon state
   const [interlinearWords, setInterlinearWords] = useState<InterlinearWord[]>(
     []
@@ -238,6 +253,9 @@ export default function BibleReaderView({
     verseAbortRef.current?.abort();
     verseAbortRef.current = null;
     setSelectedVerse(null);
+    setSheetMinimized(false);
+    setSheetDragY(0);
+    setIsDraggingSheet(false);
     setShareOpen(false);
     setLoadingInsight(false);
     setLoadingInterlinear(false);
@@ -298,18 +316,18 @@ export default function BibleReaderView({
     loadChapter(book, chapter, translation);
   }, [book, chapter, translation, loadChapter, closeVerseDrawer]);
 
-  // Lock background scroll on mobile & allow Escape key when the Verse Study modal is open
+  // Lock background scroll on mobile only while the Verse Study sheet is expanded (unlock when minimized)
   useEffect(() => {
     if (!selectedVerse) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !shareOpen) {
-        setSelectedVerse(null);
+        closeVerseDrawer();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
 
-    const isMobileModal = window.innerWidth < 1024;
+    const isMobileModal = window.innerWidth < 1024 && !sheetMinimized;
     const prevOverflow = document.body.style.overflow;
     if (isMobileModal) {
       document.body.style.overflow = "hidden";
@@ -321,7 +339,116 @@ export default function BibleReaderView({
         document.body.style.overflow = prevOverflow;
       }
     };
-  }, [selectedVerse, shareOpen]);
+  }, [selectedVerse, sheetMinimized, shareOpen, closeVerseDrawer]);
+
+  const handleSheetCollapseStart = (
+    e: React.TouchEvent,
+    fromScrollBody = false
+  ) => {
+    if (window.innerWidth >= 1024) return;
+    if (
+      fromScrollBody &&
+      sheetScrollRef.current &&
+      sheetScrollRef.current.scrollTop > 4
+    ) {
+      return;
+    }
+    const touch = e.touches[0];
+    if (!touch) return;
+    sheetTouchRef.current = {
+      startY: touch.clientY,
+      startTime: Date.now(),
+      mode: "collapse",
+      fromScrollBody,
+      engaged: !fromScrollBody,
+    };
+    if (!fromScrollBody) {
+      setIsDraggingSheet(true);
+    }
+  };
+
+  const handleSheetCollapseMove = (e: React.TouchEvent) => {
+    const state = sheetTouchRef.current;
+    if (!state || state.mode !== "collapse") return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const deltaY = touch.clientY - state.startY;
+
+    if (state.fromScrollBody && !state.engaged) {
+      if (deltaY > 10 && (sheetScrollRef.current?.scrollTop ?? 0) <= 4) {
+        state.engaged = true;
+        state.startY = touch.clientY;
+        setIsDraggingSheet(true);
+        return;
+      }
+      if (deltaY < -6) {
+        sheetTouchRef.current = null;
+      }
+      return;
+    }
+
+    if (deltaY > 0) {
+      setSheetDragY(deltaY);
+    } else {
+      setSheetDragY(0);
+    }
+  };
+
+  const handleSheetCollapseEnd = () => {
+    const state = sheetTouchRef.current;
+    sheetTouchRef.current = null;
+    if (!state || state.mode !== "collapse") return;
+    const elapsed = Math.max(Date.now() - state.startTime, 1);
+    const velocity = sheetDragY / elapsed;
+    const shouldMinimize =
+      sheetDragY > 65 || (sheetDragY > 24 && velocity > 0.32);
+    setIsDraggingSheet(false);
+    setSheetDragY(0);
+    if (shouldMinimize) {
+      setSheetMinimized(true);
+    }
+  };
+
+  const handleMinimizedTabTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    sheetTouchRef.current = {
+      startY: touch.clientY,
+      startTime: Date.now(),
+      mode: "expand",
+      engaged: true,
+    };
+    setIsDraggingSheet(true);
+  };
+
+  const handleMinimizedTabTouchMove = (e: React.TouchEvent) => {
+    const state = sheetTouchRef.current;
+    if (!state || state.mode !== "expand") return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const deltaY = touch.clientY - state.startY;
+    if (deltaY < 0) {
+      setSheetDragY(Math.max(deltaY, -120));
+    } else {
+      setSheetDragY(Math.min(deltaY * 0.25, 16));
+    }
+  };
+
+  const handleMinimizedTabTouchEnd = () => {
+    const state = sheetTouchRef.current;
+    sheetTouchRef.current = null;
+    if (!state || state.mode !== "expand") return;
+    const elapsed = Math.max(Date.now() - state.startTime, 1);
+    const upwardDist = -sheetDragY;
+    const velocity = upwardDist / elapsed;
+    const shouldExpand =
+      upwardDist > 26 || (upwardDist > 12 && velocity > 0.22);
+    setIsDraggingSheet(false);
+    setSheetDragY(0);
+    if (shouldExpand) {
+      setSheetMinimized(false);
+    }
+  };
 
   // Auto-scroll highlighted verse into view (only in full-screen reader so embedded home view stays at top)
   useEffect(() => {
@@ -422,6 +549,9 @@ export default function BibleReaderView({
     ).toLowerCase();
 
     setSelectedVerse(v);
+    setSheetMinimized(false);
+    setSheetDragY(0);
+    setIsDraggingSheet(false);
     setSelectedVerseTranslation(loadedTranslation);
     const vKey = `${v.book_name}:${v.chapter}:${v.verse}`;
     setMarginNoteDraft(highlights[vKey]?.note || "");
@@ -859,57 +989,82 @@ export default function BibleReaderView({
           </div>
         </div>
 
-        {/* Contextual Verse Insight Drawer (Modal overlay on phone/tablet, sticky side panel on desktop) */}
+        {/* Contextual Verse Insight Drawer (Swipeable bottom sheet on phone/tablet, sticky side panel on desktop) */}
         {selectedVerse && (
           <div
             role="dialog"
-            aria-modal="true"
+            aria-modal={!sheetMinimized}
             aria-label={`Verse study for ${selectedVerse.book_name} ${selectedVerse.chapter}:${selectedVerse.verse}`}
             onClick={(e) => {
-              if (e.target === e.currentTarget) setSelectedVerse(null);
+              if (e.target === e.currentTarget) setSheetMinimized(true);
             }}
-            className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none lg:block lg:p-0 lg:col-span-5 lg:sticky lg:top-20"
+            className={`${
+              sheetMinimized
+                ? "hidden lg:block"
+                : "fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 lg:static lg:inset-auto lg:z-auto lg:bg-transparent lg:backdrop-blur-none lg:block lg:p-0"
+            } lg:col-span-5 lg:sticky lg:top-20`}
           >
-            <aside className="w-full max-h-[88dvh] sm:max-w-lg lg:max-w-none lg:max-h-none flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border-t sm:border border-[#DFC9A3] dark:border-[#4A3A22] shadow-2xl lg:shadow-lg overflow-hidden">
-              {/* Mobile sheet drag handle */}
-              <div className="lg:hidden pt-2.5 pb-0.5 bg-[#FAF4E8] dark:bg-[#251E15] flex justify-center shrink-0">
-                <span className="w-10 h-1 rounded-full bg-[#D7C29E] dark:bg-[#4A3A22]" />
-              </div>
-
-              <div className="px-5 py-3.5 sm:py-4 bg-[#FAF4E8] dark:bg-[#251E15] border-b border-[#E9D7B6] dark:border-[#3C301E] flex items-center justify-between shrink-0">
-                <div>
-                  <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164]">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Lamp Verse Study
-                    {loadingInsight && (
-                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-[#F7EAD0] dark:bg-[#3A2D1B] px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-[#7B531A] dark:text-[#DFB164]">
-                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        Loading AI
-                      </span>
-                    )}
-                  </div>
-                  <h2 className="font-serif text-xl font-semibold mt-0.5">
-                    {selectedVerse.book_name} {selectedVerse.chapter}:
-                    {selectedVerse.verse}
-                  </h2>
+            <aside
+              style={
+                !sheetMinimized && sheetDragY > 0
+                  ? { transform: `translateY(${sheetDragY}px)` }
+                  : undefined
+              }
+              className={`w-full max-h-[88dvh] sm:max-w-lg lg:max-w-none lg:max-h-none flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border-t sm:border border-[#DFC9A3] dark:border-[#4A3A22] shadow-2xl lg:shadow-lg overflow-hidden ${
+                isDraggingSheet ? "" : "transition-transform duration-200 ease-out"
+              }`}
+            >
+              {/* Mobile swipe-down drag handle + header zone */}
+              <div
+                onTouchStart={(e) => handleSheetCollapseStart(e, false)}
+                onTouchMove={handleSheetCollapseMove}
+                onTouchEnd={handleSheetCollapseEnd}
+                onTouchCancel={handleSheetCollapseEnd}
+                className="touch-none lg:touch-auto bg-[#FAF4E8] dark:bg-[#251E15] border-b border-[#E9D7B6] dark:border-[#3C301E] shrink-0 select-none lg:select-auto"
+              >
+                <div className="lg:hidden pt-2.5 pb-1 flex flex-col items-center gap-1">
+                  <span className="w-12 h-1.5 rounded-full bg-[#D1B88E] dark:bg-[#5A472B]" />
+                  <span className="text-[10px] font-medium text-[#8C7B63] dark:text-[#A39178]">
+                    Swipe down to hide · X to close
+                  </span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setShareOpen(true)}
-                    title="Share Scripture Card"
-                    className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-black/25 border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] inline-flex items-center gap-1.5 transition"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    Share
-                  </button>
-                  <button
-                    onClick={() => setSelectedVerse(null)}
-                    aria-label="Close verse study"
-                    className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+
+                <div className="px-5 pb-3.5 pt-1 lg:py-4 flex items-center justify-between">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164]">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Lamp Verse Study
+                      {loadingInsight && (
+                        <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-[#F7EAD0] dark:bg-[#3A2D1B] px-2 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-[#7B531A] dark:text-[#DFB164]">
+                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          Loading AI
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="font-serif text-xl font-semibold mt-0.5">
+                      {selectedVerse.book_name} {selectedVerse.chapter}:
+                      {selectedVerse.verse}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShareOpen(true)}
+                      title="Share Scripture Card"
+                      className="px-2.5 py-1.5 rounded-lg bg-white/80 dark:bg-black/25 border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] inline-flex items-center gap-1.5 transition"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      Share
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeVerseDrawer}
+                      aria-label="Close verse study"
+                      className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -938,7 +1093,14 @@ export default function BibleReaderView({
                 ))}
               </div>
 
-              <div className="p-5 flex-1 min-h-0 overflow-y-auto overscroll-contain lg:max-h-[75vh] space-y-5">
+              <div
+                ref={sheetScrollRef}
+                onTouchStart={(e) => handleSheetCollapseStart(e, true)}
+                onTouchMove={handleSheetCollapseMove}
+                onTouchEnd={handleSheetCollapseEnd}
+                onTouchCancel={handleSheetCollapseEnd}
+                className="p-5 flex-1 min-h-0 overflow-y-auto overscroll-contain lg:max-h-[75vh] space-y-5"
+              >
                 <blockquote className="font-serif italic text-sm sm:text-base leading-relaxed pl-3.5 border-l-2 border-[#B88435] text-[#3F3A35] dark:text-[#DED6CB]">
                 &ldquo;{selectedVerse.text.trim()}&rdquo;
               </blockquote>
@@ -1362,10 +1524,103 @@ export default function BibleReaderView({
                 </>
               )}
               </div>
+
+              {/* Compact Mobile Bottom Tab to tuck modal away & jump back to Bible Reader */}
+              <div
+                onTouchStart={(e) => handleSheetCollapseStart(e, false)}
+                onTouchMove={handleSheetCollapseMove}
+                onTouchEnd={handleSheetCollapseEnd}
+                onTouchCancel={handleSheetCollapseEnd}
+                className="lg:hidden touch-none shrink-0 border-t border-[#E9D7B6] dark:border-[#3C301E] bg-[#FAF4E8]/95 dark:bg-[#251E15]/95 px-4 pt-2 pb-[calc(0.6rem+env(safe-area-inset-bottom))] flex items-center justify-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => setSheetMinimized(true)}
+                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 dark:bg-[#1A1612] border border-[#DFC9A3] dark:border-[#4A3A22] text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] shadow-sm active:scale-95 transition"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Back to Bible Reader
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </aside>
           </div>
         )}
       </div>
+
+      {/* Minimized Floating Mobile Tab — Swipe Up or Tap to Reopen Verse Study */}
+      {selectedVerse && sheetMinimized && (
+        <div
+          onTouchStart={handleMinimizedTabTouchStart}
+          onTouchMove={handleMinimizedTabTouchMove}
+          onTouchEnd={handleMinimizedTabTouchEnd}
+          onTouchCancel={handleMinimizedTabTouchEnd}
+          style={
+            sheetDragY !== 0
+              ? { transform: `translateY(${sheetDragY}px)` }
+              : undefined
+          }
+          className={`lg:hidden touch-none fixed left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-full sm:max-w-md bottom-[calc(4.4rem+env(safe-area-inset-bottom))] z-40 ${
+            isDraggingSheet ? "" : "transition-transform duration-200 ease-out"
+          }`}
+        >
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setSheetMinimized(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSheetMinimized(false);
+              }
+            }}
+            className="w-full rounded-2xl bg-[#1C1917]/95 dark:bg-[#251E15]/95 text-[#FAF7F2] border border-[#B88435]/60 shadow-xl backdrop-blur-md px-3.5 pt-1.5 pb-2.5 cursor-pointer select-none"
+          >
+            <div className="flex justify-center mb-1">
+              <span className="w-10 h-1 rounded-full bg-[#DFB164]/60" />
+            </div>
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="w-7 h-7 rounded-xl bg-[#9A6B24]/30 text-[#DFB164] flex items-center justify-center shrink-0">
+                  {loadingInsight ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate text-[#FAF7F2]">
+                    {selectedVerse.book_name} {selectedVerse.chapter}:
+                    {selectedVerse.verse} · Verse Study
+                  </p>
+                  <p className="text-[10px] text-[#D2C5B2] truncate">
+                    {loadingInsight
+                      ? "AI insight loading… swipe up or tap to view"
+                      : "Swipe up or tap to reopen AI study"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="inline-flex items-center gap-0.5 rounded-lg bg-[#9A6B24] px-2 py-1 text-[10px] font-semibold text-white">
+                  <ChevronUp className="w-3 h-3" />
+                  Open
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeVerseDrawer();
+                  }}
+                  aria-label="Close verse study"
+                  className="p-1.5 rounded-lg text-[#D2C5B2] hover:bg-white/10 transition"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Share Scripture Quote Card Modal */}
       {selectedVerse && (
