@@ -27,6 +27,7 @@ import {
   PlayCircle,
   Flame,
   Library as LibraryIcon,
+  PenLine,
 } from "lucide-react";
 import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
 import { formatDuration, noteToMarkdown } from "@/lib/client-api";
@@ -36,7 +37,9 @@ import {
   getVerseOfTheDayLocal,
   getVerseOfTheDayUTC,
 } from "@/lib/verse-of-the-day";
+import { plainTextToSafeHtml, sanitizeRichNoteHtml } from "@/lib/rich-text";
 import AskVesselChat from "./AskVesselChat";
+import RichNoteModal from "./RichNoteModal";
 
 interface LibraryViewProps {
   settings: AppSettings;
@@ -174,7 +177,7 @@ export default function LibraryView({
       : `${jumpBook} ${jumpChapter}`;
   };
   const [showTranscript, setShowTranscript] = useState(false);
-  const [personalDraft, setPersonalDraft] = useState("");
+  const [journalModalOpen, setJournalModalOpen] = useState(false);
   const [seriesDraft, setSeriesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
 
@@ -193,9 +196,9 @@ export default function LibraryView({
 
   React.useEffect(() => {
     if (selectedNote) {
-      setPersonalDraft(selectedNote.personalNotes || "");
       setSeriesDraft(selectedNote.series || "");
       setShowTranscript(false);
+      setJournalModalOpen(false);
     }
   }, [selectedNote?.id]);
 
@@ -252,11 +255,15 @@ export default function LibraryView({
     await onUpdateNote(note.id, { actionableTakeaways: next });
   };
 
-  const handleSavePersonalNotes = async () => {
+  const handleSaveRichJournal = async (plainText: string, html: string) => {
     if (!selectedNote) return;
     setSavingNotes(true);
     try {
-      await onUpdateNote(selectedNote.id, { personalNotes: personalDraft });
+      await onUpdateNote(selectedNote.id, {
+        personalNotes: plainText,
+        personalNotesHtml: html,
+      });
+      setJournalModalOpen(false);
     } finally {
       setSavingNotes(false);
     }
@@ -574,27 +581,72 @@ export default function LibraryView({
               </section>
             )}
 
-            {/* Personal Reflections Editor */}
+            {/* Personal Reflections & Rich Journal */}
             <section className="pt-4 border-t border-[#EFE8DC] dark:border-[#2A2520]">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between gap-2 mb-2.5">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90]">
-                  Your Personal Reflections & Journal
+                  Your Personal Reflections &amp; Journal
                 </h2>
                 <button
-                  onClick={handleSavePersonalNotes}
-                  disabled={savingNotes || personalDraft === (selectedNote.personalNotes || "")}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-[#9A6B24] text-white disabled:opacity-40 hover:bg-[#7B531A] transition"
+                  type="button"
+                  onClick={() => setJournalModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#9A6B24] text-white hover:bg-[#7B531A] inline-flex items-center gap-1.5 transition"
                 >
-                  {savingNotes ? "Saving..." : "Save Journal"}
+                  <PenLine className="w-3.5 h-3.5" />
+                  {selectedNote.personalNotes || selectedNote.personalNotesHtml
+                    ? "Edit Note"
+                    : "Add Note"}
                 </button>
               </div>
-              <textarea
-                value={personalDraft}
-                onChange={(e) => setPersonalDraft(e.target.value)}
-                rows={4}
-                placeholder="Write prayers, personal convictions, or follow-up thoughts here..."
-                className="w-full rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] p-3.5 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#B88435]/50"
-              />
+              {(() => {
+                const journalHtml = selectedNote.personalNotesHtml
+                  ? sanitizeRichNoteHtml(selectedNote.personalNotesHtml, 50000)
+                  : selectedNote.personalNotes
+                  ? plainTextToSafeHtml(selectedNote.personalNotes)
+                  : "";
+                if (journalHtml) {
+                  return (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setJournalModalOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setJournalModalOpen(true);
+                        }
+                      }}
+                      className="rounded-2xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FAF7F2] dark:bg-[#141210] hover:border-[#B88435] p-4 transition cursor-pointer"
+                    >
+                      <div
+                        className="lamp-rich-note text-sm text-[#2C2723] dark:text-[#EAE3D8]"
+                        dangerouslySetInnerHTML={{ __html: journalHtml }}
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setJournalModalOpen(true)}
+                    className="w-full text-left rounded-2xl border border-dashed border-[#D8C5A3] dark:border-[#4A3A22] bg-[#FAF7F2] dark:bg-[#141210] hover:border-[#9A6B24] p-4 flex items-center justify-between gap-3 transition"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-xl bg-[#F7EAD0] dark:bg-[#33281A] text-[#9A6B24] dark:text-[#DFB164] flex items-center justify-center shrink-0">
+                        <PenLine className="w-4 h-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8]">
+                          Write prayers, personal convictions, or study notes...
+                        </p>
+                        <p className="text-xs text-[#6B635B] dark:text-[#A39A90] mt-0.5">
+                          Opens Note Studio with font styles, colors, highlights &amp; bullets
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })()}
             </section>
 
             {/* Interactive Ask Vessel Follow-Up Chat */}
@@ -635,6 +687,24 @@ export default function LibraryView({
             )}
           </div>
         </article>
+
+        {/* Stacked Rich Note Editor Modal for Personal Reflections & Journal */}
+        <RichNoteModal
+          open={journalModalOpen}
+          onClose={() => setJournalModalOpen(false)}
+          title={selectedNote.title}
+          subtitle="Personal Reflections & Journal"
+          initialPlainText={selectedNote.personalNotes || ""}
+          initialHtml={selectedNote.personalNotesHtml}
+          saving={savingNotes}
+          placeholder="Write prayers, personal convictions, bullet outlines, or follow-up thoughts here..."
+          onSave={async ({ plainText, html }) => {
+            await handleSaveRichJournal(plainText, html);
+          }}
+          onClear={async () => {
+            await handleSaveRichJournal("", "");
+          }}
+        />
       </div>
     );
   }

@@ -36,6 +36,7 @@ export interface StudyNote {
   actionableTakeaways: ActionTakeaway[];
   reflectionQuestions: string[];
   personalNotes: string;
+  personalNotesHtml?: string;
   transcript?: string;
   durationSeconds?: number;
 }
@@ -49,6 +50,7 @@ export interface VerseHighlight {
   verse: number;
   color: HighlightColor;
   note?: string;
+  noteHtml?: string;
   updatedAt: string;
 }
 

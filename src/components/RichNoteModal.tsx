@@ -1,0 +1,863 @@
+"use client";
+
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import {
+  X,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Quote,
+  Undo2,
+  Redo2,
+  RemoveFormatting,
+  Highlighter,
+  Palette,
+  Type,
+  CheckSquare,
+  Save,
+  Loader2,
+  Trash2,
+  PenLine,
+} from "lucide-react";
+import { HighlightColor } from "@/lib/types";
+import {
+  NOTE_FONTS,
+  NOTE_INK_COLORS,
+  NOTE_TEXT_HIGHLIGHTS,
+  plainTextToSafeHtml,
+  richHtmlToPlainText,
+  sanitizeRichNoteHtml,
+} from "@/lib/rich-text";
+
+interface RichNoteModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  quotePreview?: string;
+  initialPlainText: string;
+  initialHtml?: string;
+  highlightColor?: HighlightColor;
+  showHighlightPicker?: boolean;
+  placeholder?: string;
+  saving?: boolean;
+  onSave: (payload: {
+    plainText: string;
+    html: string;
+    highlightColor?: HighlightColor;
+  }) => Promise<void> | void;
+  onClear?: () => Promise<void> | void;
+}
+
+const VERSE_HIGHLIGHT_SWATCHES: {
+  id: HighlightColor;
+  label: string;
+  swatch: string;
+}[] = [
+  { id: "gold", label: "Gold", swatch: "bg-amber-400" },
+  { id: "sage", label: "Sage", swatch: "bg-emerald-400" },
+  { id: "sky", label: "Sky", swatch: "bg-sky-400" },
+  { id: "rose", label: "Rose", swatch: "bg-rose-400" },
+];
+
+type BlockStyleId = "p" | "h3" | "h4" | "blockquote";
+type TextSizeId = "sm" | "md" | "lg";
+
+export default function RichNoteModal({
+  open,
+  onClose,
+  title,
+  subtitle,
+  quotePreview,
+  initialPlainText,
+  initialHtml,
+  highlightColor = "gold",
+  showHighlightPicker = false,
+  placeholder = "Write your study notes, observations, prayers, or outline here...",
+  saving = false,
+  onSave,
+  onClear,
+}: RichNoteModalProps) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+
+  const [selectedHighlight, setSelectedHighlight] =
+    useState<HighlightColor>(highlightColor);
+  const [activeTray, setActiveTray] = useState<"none" | "ink" | "highlight">(
+    "none"
+  );
+  const [activeInkId, setActiveInkId] = useState("default");
+  const [activeHlId, setActiveHlId] = useState("none");
+  const [blockStyle, setBlockStyle] = useState<BlockStyleId>("p");
+  const [fontChoice, setFontChoice] = useState<"sans" | "serif" | "mono">("sans");
+  const [textSize, setTextSize] = useState<TextSizeId>("md");
+  const [wordCount, setWordCount] = useState(0);
+  const [hasContent, setHasContent] = useState(false);
+
+  // Active formatting flags for toolbar visual feedback
+  const [fmtState, setFmtState] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    ul: false,
+    ol: false,
+  });
+
+  const updateCounts = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const plain = richHtmlToPlainText(el.innerHTML);
+    setHasContent(plain.length > 0);
+    setWordCount(plain ? plain.split(/\s+/).filter(Boolean).length : 0);
+  }, []);
+
+  const captureSelection = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (el.contains(range.commonAncestorContainer)) {
+      savedRangeRef.current = range.cloneRange();
+    }
+  }, []);
+
+  const restoreSelection = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel) return;
+    if (savedRangeRef.current) {
+      try {
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+      } catch {
+        // Range no longer valid; leave focus in editor
+      }
+    }
+  }, []);
+
+  const refreshFormatState = useCallback(() => {
+    captureSelection();
+    try {
+      setFmtState({
+        bold: document.queryCommandState("bold"),
+        italic: document.queryCommandState("italic"),
+        underline: document.queryCommandState("underline"),
+        strike: document.queryCommandState("strikeThrough"),
+        ul: document.queryCommandState("insertUnorderedList"),
+        ol: document.queryCommandState("insertOrderedList"),
+      });
+      const block = (document.queryCommandValue("formatBlock") || "")
+        .replace(/[<>]/g, "")
+        .toLowerCase();
+      if (block === "h3" || block === "h4" || block === "blockquote") {
+        setBlockStyle(block);
+      } else {
+        setBlockStyle("p");
+      }
+    } catch {
+      // queryCommandState may throw in non-editable edge states
+    }
+  }, [captureSelection]);
+
+  // Hydrate content whenever the modal opens
+  useEffect(() => {
+    if (!open) return;
+    setSelectedHighlight(highlightColor);
+    setActiveTray("none");
+    setActiveInkId("default");
+    setActiveHlId("none");
+    setBlockStyle("p");
+    setFontChoice("sans");
+    setTextSize("md");
+
+    const initialSafe = initialHtml
+      ? sanitizeRichNoteHtml(initialHtml, 50000)
+      : plainTextToSafeHtml(initialPlainText);
+
+    const raf = window.requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      el.innerHTML = initialSafe;
+
+      // Convert saved semantic lamp-* classes into live inline styles inside the
+      // contentEditable canvas so execCommand color/font/removeFormat cleanly overrides them.
+      el.querySelectorAll<HTMLElement>("[class]").forEach((node) => {
+        const classes = Array.from(node.classList);
+        for (const cls of classes) {
+          const ink = NOTE_INK_COLORS.find((c) => c.className === cls);
+          if (ink?.editorHex) {
+            node.style.color = ink.editorHex;
+            node.classList.remove(cls);
+            continue;
+          }
+          const hl = NOTE_TEXT_HIGHLIGHTS.find((h) => h.className === cls);
+          if (hl?.editorHex) {
+            node.style.backgroundColor = hl.editorHex;
+            node.classList.remove(cls);
+            continue;
+          }
+          const font = NOTE_FONTS.find((f) => f.className === cls);
+          if (font) {
+            node.style.fontFamily = font.execFontName;
+            node.classList.remove(cls);
+            continue;
+          }
+          if (cls === "lamp-size-sm") {
+            node.style.fontSize = "small";
+            node.classList.remove(cls);
+          } else if (cls === "lamp-size-lg") {
+            node.style.fontSize = "large";
+            node.classList.remove(cls);
+          }
+        }
+        if (node.classList.length === 0) {
+          node.removeAttribute("class");
+        }
+      });
+
+      updateCounts();
+
+      // Focus and place caret at end of note
+      el.focus();
+      try {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(range);
+          savedRangeRef.current = range.cloneRange();
+        }
+      } catch {
+        // ignore selection init issues
+      }
+      refreshFormatState();
+    });
+
+    return () => window.cancelAnimationFrame(raf);
+  }, [open, initialHtml, initialPlainText, highlightColor, updateCounts, refreshFormatState]);
+
+  const handleSave = useCallback(async () => {
+    const el = editorRef.current;
+    if (!el || saving) return;
+    const safeHtml = sanitizeRichNoteHtml(el.innerHTML, 50000);
+    const plainText = richHtmlToPlainText(safeHtml);
+    await onSave({
+      plainText,
+      html: safeHtml,
+      highlightColor: showHighlightPicker ? selectedHighlight : undefined,
+    });
+  }, [onSave, saving, selectedHighlight, showHighlightPicker]);
+
+  // Escape closes ONLY this stacked modal; Ctrl/Cmd+S saves immediately
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void handleSave();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open, onClose, handleSave]);
+
+  if (!open) return null;
+
+  const exec = (command: string, value?: string) => {
+    restoreSelection();
+    try {
+      document.execCommand(command, false, value);
+    } catch {
+      // ignore unsupported browser command
+    }
+    captureSelection();
+    updateCounts();
+    refreshFormatState();
+  };
+
+  const handleApplyBlockStyle = (next: BlockStyleId) => {
+    setBlockStyle(next);
+    const tagMap: Record<BlockStyleId, string> = {
+      p: "P",
+      h3: "H3",
+      h4: "H4",
+      blockquote: "BLOCKQUOTE",
+    };
+    exec("formatBlock", tagMap[next]);
+  };
+
+  const handleApplyFont = (next: "sans" | "serif" | "mono") => {
+    setFontChoice(next);
+    const opt = NOTE_FONTS.find((f) => f.id === next);
+    if (opt) {
+      exec("fontName", opt.execFontName);
+    }
+  };
+
+  const handleApplyTextSize = (next: TextSizeId) => {
+    setTextSize(next);
+    const sizeArg = next === "sm" ? "2" : next === "lg" ? "5" : "3";
+    exec("fontSize", sizeArg);
+  };
+
+  const handleApplyInkColor = (inkId: string) => {
+    setActiveInkId(inkId);
+    const opt = NOTE_INK_COLORS.find((c) => c.id === inkId);
+    if (!opt || !opt.editorHex) {
+      // Reset color cleanly to theme default
+      restoreSelection();
+      try {
+        const isDark = document.documentElement.classList.contains("dark");
+        document.execCommand("foreColor", false, isDark ? "#F5F0E8" : "#1C1917");
+      } catch {
+        // ignore
+      }
+      captureSelection();
+      updateCounts();
+      return;
+    }
+    exec("foreColor", opt.editorHex);
+  };
+
+  const handleApplyTextHighlight = (hlId: string) => {
+    setActiveHlId(hlId);
+    const opt = NOTE_TEXT_HIGHLIGHTS.find((h) => h.id === hlId);
+    if (!opt || !opt.editorHex) {
+      exec("hiliteColor", "transparent");
+      return;
+    }
+    restoreSelection();
+    try {
+      const ok = document.execCommand("hiliteColor", false, opt.editorHex);
+      if (!ok) {
+        document.execCommand("backColor", false, opt.editorHex);
+      }
+    } catch {
+      // ignore
+    }
+    captureSelection();
+    updateCounts();
+    refreshFormatState();
+  };
+
+  const handleInsertChecklist = () => {
+    restoreSelection();
+    try {
+      document.execCommand("insertHTML", false, "<div>☐&nbsp;</div>");
+    } catch {
+      document.execCommand("insertText", false, "\n☐ ");
+    }
+    captureSelection();
+    updateCounts();
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData("text/html");
+    const text = e.clipboardData.getData("text/plain");
+    const safeInsert = html
+      ? sanitizeRichNoteHtml(html, 20000)
+      : plainTextToSafeHtml(text);
+    if (safeInsert) {
+      try {
+        document.execCommand("insertHTML", false, safeInsert);
+      } catch {
+        document.execCommand("insertText", false, text);
+      }
+      updateCounts();
+      refreshFormatState();
+    }
+  };
+
+  const activeInkObj =
+    NOTE_INK_COLORS.find((c) => c.id === activeInkId) || NOTE_INK_COLORS[0];
+  const activeHlObj =
+    NOTE_TEXT_HIGHLIGHTS.find((h) => h.id === activeHlId) ||
+    NOTE_TEXT_HIGHLIGHTS[0];
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-sm p-0 sm:p-4"
+    >
+      <div className="w-full sm:max-w-2xl max-h-[92dvh] flex flex-col rounded-t-3xl sm:rounded-3xl bg-[#FDFCFA] dark:bg-[#1D1A17] border-t sm:border border-[#DFC9A3] dark:border-[#4A3A22] shadow-2xl overflow-hidden">
+        {/* Stacked Modal Header */}
+        <div className="px-4 sm:px-5 py-3.5 bg-[#FAF4E8] dark:bg-[#251E15] border-b border-[#E9D7B6] dark:border-[#3C301E] flex items-start justify-between gap-3 shrink-0">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#9A6B24] dark:text-[#DFB164]">
+              <PenLine className="w-3.5 h-3.5" />
+              Lamp Note Studio
+            </div>
+            <h3 className="font-serif text-lg sm:text-xl font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate mt-0.5">
+              {title}
+            </h3>
+            {subtitle && (
+              <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
+                {subtitle}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {showHighlightPicker && (
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-white/80 dark:bg-black/25 border border-[#E6D1A9] dark:border-[#4A3A22]"
+                title="Verse highlight color"
+              >
+                {VERSE_HIGHLIGHT_SWATCHES.map((sw) => (
+                  <button
+                    key={sw.id}
+                    type="button"
+                    onClick={() => setSelectedHighlight(sw.id)}
+                    aria-label={`Highlight verse ${sw.label}`}
+                    title={`Highlight ${sw.label}`}
+                    className={`w-4 h-4 rounded-full ${sw.swatch} transition transform hover:scale-110 ${
+                      selectedHighlight === sw.id
+                        ? "ring-2 ring-offset-1 ring-[#1C1917] dark:ring-white dark:ring-offset-[#1D1A17]"
+                        : "opacity-75 hover:opacity-100"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close note editor"
+              className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-[#6B635B] dark:text-[#BDB4AA] transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Optional Verse Quote Banner */}
+        {quotePreview && (
+          <div className="px-4 sm:px-5 py-2 bg-[#FAF7F2] dark:bg-[#161310] border-b border-[#EFE8DC] dark:border-[#2A2520] shrink-0">
+            <p className="font-serif italic text-xs text-[#574F47] dark:text-[#C5BCB0] line-clamp-2 pl-2.5 border-l-2 border-[#B88435]">
+              &ldquo;{quotePreview}&rdquo;
+            </p>
+          </div>
+        )}
+
+        {/* Rich Formatting Toolbar */}
+        <div className="px-3 sm:px-4 py-2 bg-[#FAF7F2] dark:bg-[#171411] border-b border-[#E6DCCB] dark:border-[#2F2A24] space-y-2 shrink-0">
+          {/* Row 1: Word Type, Font Family, Text Size + Inline B/I/U/S */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Word Type (Block Style) */}
+            <div className="inline-flex items-center rounded-lg border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-1.5">
+              <Type className="w-3.5 h-3.5 text-[#9A6B24] dark:text-[#DFB164] mr-1 shrink-0" />
+              <select
+                aria-label="Text style"
+                value={blockStyle}
+                onChange={(e) =>
+                  handleApplyBlockStyle(e.target.value as BlockStyleId)
+                }
+                className="bg-transparent py-1 pr-1 text-xs font-medium text-[#1C1917] dark:text-[#F5F0E8] focus:outline-none cursor-pointer"
+              >
+                <option value="p" className="bg-white dark:bg-[#1D1A17]">
+                  Body
+                </option>
+                <option value="h3" className="bg-white dark:bg-[#1D1A17]">
+                  Heading
+                </option>
+                <option value="h4" className="bg-white dark:bg-[#1D1A17]">
+                  Subhead
+                </option>
+                <option value="blockquote" className="bg-white dark:bg-[#1D1A17]">
+                  Quote
+                </option>
+              </select>
+            </div>
+
+            {/* Font Family (Word Type) */}
+            <select
+              aria-label="Font family"
+              value={fontChoice}
+              onChange={(e) =>
+                handleApplyFont(e.target.value as "sans" | "serif" | "mono")
+              }
+              className="rounded-lg border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-2 py-1 text-xs font-medium text-[#1C1917] dark:text-[#F5F0E8] focus:outline-none cursor-pointer"
+            >
+              {NOTE_FONTS.map((f) => (
+                <option
+                  key={f.id}
+                  value={f.id}
+                  className="bg-white dark:bg-[#1D1A17]"
+                >
+                  {f.label}
+                </option>
+              ))}
+            </select>
+
+            {/* Text Size */}
+            <select
+              aria-label="Text size"
+              value={textSize}
+              onChange={(e) =>
+                handleApplyTextSize(e.target.value as TextSizeId)
+              }
+              className="rounded-lg border border-[#DFD5C5] dark:border-[#36302A] bg-white dark:bg-[#1D1A17] px-2 py-1 text-xs font-medium text-[#1C1917] dark:text-[#F5F0E8] focus:outline-none cursor-pointer"
+            >
+              <option value="sm" className="bg-white dark:bg-[#1D1A17]">
+                Small
+              </option>
+              <option value="md" className="bg-white dark:bg-[#1D1A17]">
+                Normal
+              </option>
+              <option value="lg" className="bg-white dark:bg-[#1D1A17]">
+                Large
+              </option>
+            </select>
+
+            <span className="h-4 w-px bg-[#E6DCCB] dark:bg-[#322C26] mx-0.5 hidden sm:inline-block" />
+
+            {/* Bold / Italic / Underline / Strike */}
+            <div className="inline-flex items-center gap-0.5">
+              {(
+                [
+                  { id: "bold", cmd: "bold", icon: Bold, label: "Bold", active: fmtState.bold },
+                  { id: "italic", cmd: "italic", icon: Italic, label: "Italic", active: fmtState.italic },
+                  { id: "underline", cmd: "underline", icon: Underline, label: "Underline", active: fmtState.underline },
+                  { id: "strike", cmd: "strikeThrough", icon: Strikethrough, label: "Strikethrough", active: fmtState.strike },
+                ] as const
+              ).map((btn) => {
+                const Icon = btn.icon;
+                return (
+                  <button
+                    key={btn.id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => exec(btn.cmd)}
+                    aria-label={btn.label}
+                    aria-pressed={btn.active}
+                    title={btn.label}
+                    className={`p-1.5 rounded-lg transition ${
+                      btn.active
+                        ? "bg-[#9A6B24] text-white dark:bg-[#DFB164] dark:text-[#141210]"
+                        : "text-[#4A433C] dark:text-[#D1C9BE] hover:bg-[#EFE8DC] dark:hover:bg-[#2A2520]"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Row 2: Bullets, Numbering, Checklist, Quote, Font Color, Highlight, Undo/Redo */}
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <div className="flex flex-wrap items-center gap-1">
+              {/* Bulleted List */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => exec("insertUnorderedList")}
+                aria-label="Bulleted list"
+                aria-pressed={fmtState.ul}
+                title="Bulleted list"
+                className={`px-2 py-1 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition ${
+                  fmtState.ul
+                    ? "bg-[#9A6B24] text-white dark:bg-[#DFB164] dark:text-[#141210]"
+                    : "bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                }`}
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Bullets</span>
+              </button>
+
+              {/* Numbered List */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => exec("insertOrderedList")}
+                aria-label="Numbered list"
+                aria-pressed={fmtState.ol}
+                title="Numbered list"
+                className={`px-2 py-1 rounded-lg text-xs font-medium inline-flex items-center gap-1 transition ${
+                  fmtState.ol
+                    ? "bg-[#9A6B24] text-white dark:bg-[#DFB164] dark:text-[#141210]"
+                    : "bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                }`}
+              >
+                <ListOrdered className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Numbered</span>
+              </button>
+
+              {/* Checklist item */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleInsertChecklist}
+                aria-label="Insert checklist item"
+                title="Insert checklist item"
+                className="px-2 py-1 rounded-lg bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435] text-xs font-medium inline-flex items-center gap-1 transition"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Check</span>
+              </button>
+
+              {/* Quote */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() =>
+                  handleApplyBlockStyle(
+                    blockStyle === "blockquote" ? "p" : "blockquote"
+                  )
+                }
+                aria-label="Toggle quote block"
+                aria-pressed={blockStyle === "blockquote"}
+                title="Quote block"
+                className={`p-1.5 rounded-lg border transition ${
+                  blockStyle === "blockquote"
+                    ? "bg-[#9A6B24] border-[#9A6B24] text-white dark:bg-[#DFB164] dark:border-[#DFB164] dark:text-[#141210]"
+                    : "bg-white dark:bg-[#1D1A17] border-[#E6DCCB] dark:border-[#322C26] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                }`}
+              >
+                <Quote className="w-3.5 h-3.5" />
+              </button>
+
+              <span className="h-4 w-px bg-[#E6DCCB] dark:bg-[#322C26] mx-0.5" />
+
+              {/* Font Color Toggle */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() =>
+                  setActiveTray((t) => (t === "ink" ? "none" : "ink"))
+                }
+                aria-label="Font color"
+                aria-expanded={activeTray === "ink"}
+                title="Font color"
+                className={`px-2 py-1 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 transition ${
+                  activeTray === "ink"
+                    ? "border-[#9A6B24] bg-[#F7EAD0]/80 text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
+                    : "bg-white dark:bg-[#1D1A17] border-[#E6DCCB] dark:border-[#322C26] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Color</span>
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${activeInkObj.swatchClass} ring-1 ring-black/15 dark:ring-white/25`}
+                />
+              </button>
+
+              {/* Text Highlight Toggle */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() =>
+                  setActiveTray((t) => (t === "highlight" ? "none" : "highlight"))
+                }
+                aria-label="Text highlight color"
+                aria-expanded={activeTray === "highlight"}
+                title="Text highlight"
+                className={`px-2 py-1 rounded-lg border text-xs font-medium inline-flex items-center gap-1.5 transition ${
+                  activeTray === "highlight"
+                    ? "border-[#9A6B24] bg-[#F7EAD0]/80 text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
+                    : "bg-white dark:bg-[#1D1A17] border-[#E6DCCB] dark:border-[#322C26] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                }`}
+              >
+                <Highlighter className="w-3.5 h-3.5" />
+                <span className="hidden xs:inline sm:inline">Mark</span>
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${activeHlObj.swatchClass}`}
+                />
+              </button>
+            </div>
+
+            {/* Undo / Redo / Clear Formatting */}
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => exec("undo")}
+                aria-label="Undo"
+                title="Undo"
+                className="p-1.5 rounded-lg text-[#6B635B] dark:text-[#A39A90] hover:bg-[#EFE8DC] dark:hover:bg-[#2A2520] transition"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => exec("redo")}
+                aria-label="Redo"
+                title="Redo"
+                className="p-1.5 rounded-lg text-[#6B635B] dark:text-[#A39A90] hover:bg-[#EFE8DC] dark:hover:bg-[#2A2520] transition"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  exec("removeFormat");
+                  setActiveInkId("default");
+                  setActiveHlId("none");
+                }}
+                aria-label="Clear formatting"
+                title="Clear formatting"
+                className="p-1.5 rounded-lg text-[#6B635B] dark:text-[#A39A90] hover:bg-[#EFE8DC] dark:hover:bg-[#2A2520] transition"
+              >
+                <RemoveFormatting className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Expandable Font Color Swatch Tray */}
+          {activeTray === "ink" && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[#EBE2D3] dark:border-[#2C2721]">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] mr-1">
+                Font Color:
+              </span>
+              {NOTE_INK_COLORS.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleApplyInkColor(c.id)}
+                  className={`px-2 py-1 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${
+                    activeInkId === c.id
+                      ? "border-[#9A6B24] bg-[#F7EAD0]/75 text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
+                      : "border-[#E6DCCB] dark:border-[#322C26] bg-white dark:bg-[#1D1A17] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                  }`}
+                >
+                  <span
+                    className={`w-3 h-3 rounded-full ${c.swatchClass} ring-1 ring-black/15 dark:ring-white/25`}
+                  />
+                  <span>{c.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Expandable Text Highlight Swatch Tray */}
+          {activeTray === "highlight" && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[#EBE2D3] dark:border-[#2C2721]">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6B635B] dark:text-[#A39A90] mr-1">
+                Text Marker:
+              </span>
+              {NOTE_TEXT_HIGHLIGHTS.map((h) => (
+                <button
+                  key={h.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleApplyTextHighlight(h.id)}
+                  className={`px-2 py-1 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${
+                    activeHlId === h.id
+                      ? "border-[#9A6B24] bg-[#F7EAD0]/75 text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
+                      : "border-[#E6DCCB] dark:border-[#322C26] bg-white dark:bg-[#1D1A17] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                  }`}
+                >
+                  <span className={`w-3 h-3 rounded-full ${h.swatchClass}`} />
+                  <span>{h.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Spacious Rich Writing Canvas */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white dark:bg-[#141210] p-4 sm:p-6">
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Note content"
+            data-placeholder={placeholder}
+            onInput={() => {
+              const el = editorRef.current;
+              if (el && !richHtmlToPlainText(el.innerHTML) && el.innerHTML.trim() === "<br>") {
+                el.innerHTML = "";
+              }
+              updateCounts();
+              captureSelection();
+            }}
+            onKeyUp={refreshFormatState}
+            onMouseUp={refreshFormatState}
+            onBlur={captureSelection}
+            onPaste={handlePaste}
+            className="lamp-rich-note min-h-[210px] sm:min-h-[260px] text-base sm:text-[15px] text-[#1C1917] dark:text-[#F5F0E8] focus:outline-none"
+          />
+        </div>
+
+        {/* Bottom Action Footer */}
+        <div className="px-4 sm:px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 bg-[#FAF7F2] dark:bg-[#171411] border-t border-[#E6DCCB] dark:border-[#2F2A24] flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-3 text-[11px] text-[#786F66] dark:text-[#9C9288]">
+            <span>
+              {wordCount} {wordCount === 1 ? "word" : "words"}
+            </span>
+            <span className="hidden sm:inline">· Ctrl/⌘+S to save</span>
+            {onClear && hasContent && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={async () => {
+                  if (editorRef.current) editorRef.current.innerHTML = "";
+                  updateCounts();
+                  await onClear();
+                }}
+                className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 hover:underline font-medium"
+              >
+                <Trash2 className="w-3 h-3" />
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-3.5 py-2 rounded-xl border border-[#DFD5C5] dark:border-[#36302A] text-xs font-semibold text-[#574F47] dark:text-[#C9BFB3] hover:bg-[#EFE8DC] dark:hover:bg-[#25211D] transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className="px-4 py-2 rounded-xl bg-[#9A6B24] hover:bg-[#7B531A] dark:bg-[#DFB164] dark:hover:bg-[#E7C07D] text-white dark:text-[#141210] text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm disabled:opacity-50 transition"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  Save Note
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

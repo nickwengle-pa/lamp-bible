@@ -6,6 +6,7 @@ import {
 } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth";
 import { HighlightColor, VerseHighlight } from "@/lib/types";
+import { richHtmlToPlainText, sanitizeRichNoteHtml } from "@/lib/rich-text";
 
 export async function GET(request: Request) {
   try {
@@ -34,6 +35,7 @@ export async function PUT(request: Request) {
       verse?: number;
       color?: HighlightColor;
       note?: string;
+      noteHtml?: string;
     };
 
     if (!body.book || !body.chapter || !body.verse || !body.color) {
@@ -43,6 +45,14 @@ export async function PUT(request: Request) {
       );
     }
 
+    const sanitizedHtml = body.noteHtml
+      ? sanitizeRichNoteHtml(body.noteHtml)
+      : undefined;
+    const plainNote =
+      body.note?.trim() ||
+      (sanitizedHtml ? richHtmlToPlainText(sanitizedHtml) : "") ||
+      undefined;
+
     const key = `${body.book}:${body.chapter}:${body.verse}`;
     const entry: VerseHighlight = {
       key,
@@ -50,7 +60,8 @@ export async function PUT(request: Request) {
       chapter: body.chapter,
       verse: body.verse,
       color: body.color,
-      note: body.note?.trim() || undefined,
+      note: plainNote,
+      noteHtml: sanitizedHtml || undefined,
       updatedAt: new Date().toISOString(),
     };
 

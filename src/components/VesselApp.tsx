@@ -333,12 +333,13 @@ export default function VesselApp() {
     chapter: number,
     verse: number,
     color: HighlightColor,
-    note?: string
+    note?: string,
+    noteHtml?: string
   ) => {
     const res = await fetch("/api/highlights", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ book, chapter, verse, color, note }),
+      body: JSON.stringify({ book, chapter, verse, color, note, noteHtml }),
     });
     if (res.ok) {
       const data = (await res.json()) as {

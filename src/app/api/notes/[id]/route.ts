@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { deleteNote, getNoteById, updateNote } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth";
 import { StudyNote } from "@/lib/types";
+import { richHtmlToPlainText, sanitizeRichNoteHtml } from "@/lib/rich-text";
 
 export async function GET(
   request: Request,
@@ -34,7 +35,17 @@ export async function PATCH(
       return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
     }
     const { id } = await context.params;
-    const updates = (await request.json()) as Partial<StudyNote>;
+    const rawUpdates = (await request.json()) as Partial<StudyNote>;
+    const updates: Partial<StudyNote> = { ...rawUpdates };
+    if (rawUpdates.personalNotesHtml !== undefined) {
+      const safeHtml = rawUpdates.personalNotesHtml
+        ? sanitizeRichNoteHtml(rawUpdates.personalNotesHtml, 50000)
+        : "";
+      updates.personalNotesHtml = safeHtml || undefined;
+      if (rawUpdates.personalNotes === undefined) {
+        updates.personalNotes = safeHtml ? richHtmlToPlainText(safeHtml) : "";
+      }
+    }
     const updated = await updateNote(id, updates, user.id);
     if (!updated) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });

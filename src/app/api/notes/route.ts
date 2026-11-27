@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createNote, getAllNotes } from "@/lib/storage";
 import { getSessionUser } from "@/lib/auth";
 import { StudyNote } from "@/lib/types";
+import { richHtmlToPlainText, sanitizeRichNoteHtml } from "@/lib/rich-text";
 
 export async function GET(request: Request) {
   try {
@@ -55,6 +56,13 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Partial<StudyNote>;
     const now = new Date().toISOString();
 
+    const safePersonalHtml = body.personalNotesHtml
+      ? sanitizeRichNoteHtml(body.personalNotesHtml, 50000)
+      : undefined;
+    const resolvedPersonalNotes =
+      body.personalNotes ||
+      (safePersonalHtml ? richHtmlToPlainText(safePersonalHtml) : "");
+
     const newNote: StudyNote = {
       id: body.id || crypto.randomUUID(),
       title: body.title?.trim() || "Untitled Study Note",
@@ -80,7 +88,8 @@ export async function POST(request: Request) {
       reflectionQuestions: Array.isArray(body.reflectionQuestions)
         ? body.reflectionQuestions
         : [],
-      personalNotes: body.personalNotes || "",
+      personalNotes: resolvedPersonalNotes,
+      personalNotesHtml: safePersonalHtml || undefined,
       transcript: body.transcript || undefined,
       durationSeconds: body.durationSeconds,
     };

@@ -63,3 +63,178 @@
 .animate-pulse-ring {
   animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
+
+/* Rich Note Editor & Rendered Rich Margin / Journal Notes */
+.lamp-rich-note {
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.lamp-rich-note[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #9c9288;
+  pointer-events: none;
+}
+
+.lamp-rich-note p {
+  margin: 0.25rem 0;
+}
+
+.lamp-rich-note p:first-child {
+  margin-top: 0;
+}
+
+.lamp-rich-note p:last-child {
+  margin-bottom: 0;
+}
+
+.lamp-rich-note h2,
+.lamp-rich-note h3,
+.lamp-rich-note h4 {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.6rem 0 0.25rem;
+}
+
+.lamp-rich-note h2 {
+  font-size: 1.25rem;
+}
+
+.lamp-rich-note h3 {
+  font-size: 1.1rem;
+}
+
+.lamp-rich-note h4 {
+  font-size: 0.98rem;
+}
+
+.lamp-rich-note ul {
+  list-style-type: disc;
+  padding-left: 1.35rem;
+  margin: 0.35rem 0;
+}
+
+.lamp-rich-note ol {
+  list-style-type: decimal;
+  padding-left: 1.35rem;
+  margin: 0.35rem 0;
+}
+
+.lamp-rich-note li {
+  margin: 0.15rem 0;
+}
+
+.lamp-rich-note blockquote {
+  border-left: 3px solid #b88435;
+  padding-left: 0.75rem;
+  margin: 0.45rem 0;
+  font-style: italic;
+  opacity: 0.92;
+}
+
+/* Font family (Word Type) classes */
+.lamp-rich-note .lamp-font-serif,
+.lamp-rich-note.lamp-font-serif {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+}
+
+.lamp-rich-note .lamp-font-sans,
+.lamp-rich-note.lamp-font-sans {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.lamp-rich-note .lamp-font-mono,
+.lamp-rich-note.lamp-font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+/* Size classes */
+.lamp-rich-note .lamp-size-sm {
+  font-size: 0.84em;
+}
+
+.lamp-rich-note .lamp-size-lg {
+  font-size: 1.18em;
+}
+
+/* Curated Light & Dark-mode-safe Ink Colors */
+.lamp-rich-note .lamp-ink-gold {
+  color: #9a6b24;
+}
+.dark .lamp-rich-note .lamp-ink-gold {
+  color: #dfb164;
+}
+
+.lamp-rich-note .lamp-ink-crimson {
+  color: #b91c1c;
+}
+.dark .lamp-rich-note .lamp-ink-crimson {
+  color: #fca5a5;
+}
+
+.lamp-rich-note .lamp-ink-emerald {
+  color: #15803d;
+}
+.dark .lamp-rich-note .lamp-ink-emerald {
+  color: #86efac;
+}
+
+.lamp-rich-note .lamp-ink-cobalt {
+  color: #1d4ed8;
+}
+.dark .lamp-rich-note .lamp-ink-cobalt {
+  color: #93c5fd;
+}
+
+.lamp-rich-note .lamp-ink-violet {
+  color: #7e22ce;
+}
+.dark .lamp-rich-note .lamp-ink-violet {
+  color: #d8b4fe;
+}
+
+.lamp-rich-note .lamp-ink-slate {
+  color: #57534e;
+}
+.dark .lamp-rich-note .lamp-ink-slate {
+  color: #a8a29e;
+}
+
+/* Curated Light & Dark-mode-safe Text Highlights */
+.lamp-rich-note .lamp-hl-gold {
+  background-color: rgba(253, 230, 138, 0.72);
+  border-radius: 0.25rem;
+  padding: 0 0.2rem;
+}
+.dark .lamp-rich-note .lamp-hl-gold {
+  background-color: rgba(180, 130, 45, 0.42);
+}
+
+.lamp-rich-note .lamp-hl-sage {
+  background-color: rgba(187, 247, 208, 0.72);
+  border-radius: 0.25rem;
+  padding: 0 0.2rem;
+}
+.dark .lamp-rich-note .lamp-hl-sage {
+  background-color: rgba(22, 163, 74, 0.36);
+}
+
+.lamp-rich-note .lamp-hl-sky {
+  background-color: rgba(186, 230, 253, 0.72);
+  border-radius: 0.25rem;
+  padding: 0 0.2rem;
+}
+.dark .lamp-rich-note .lamp-hl-sky {
+  background-color: rgba(37, 99, 235, 0.38);
+}
+
+.lamp-rich-note .lamp-hl-rose {
+  background-color: rgba(254, 205, 211, 0.72);
+  border-radius: 0.25rem;
+  padding: 0 0.2rem;
+}
+.dark .lamp-rich-note .lamp-hl-rose {
+  background-color: rgba(225, 29, 72, 0.36);
+}
