@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Mic,
@@ -31,6 +31,11 @@ import {
 import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
 import { formatDuration, noteToMarkdown } from "@/lib/client-api";
 import { BIBLE_BOOKS, parseScriptureReference } from "@/lib/bible-books";
+import {
+  DailyVerse,
+  getVerseOfTheDayLocal,
+  getVerseOfTheDayUTC,
+} from "@/lib/verse-of-the-day";
 import AskVesselChat from "./AskVesselChat";
 
 interface LibraryViewProps {
@@ -138,6 +143,13 @@ export default function LibraryView({
   const [filter, setFilter] = useState<LibrarySection>("all");
   const [seriesFilter, setSeriesFilter] = useState<string>("all");
   const [libraryDrawerOpen, setLibraryDrawerOpen] = useState(false);
+  const [dailyVerse, setDailyVerse] = useState<DailyVerse>(() =>
+    getVerseOfTheDayUTC()
+  );
+
+  useEffect(() => {
+    setDailyVerse(getVerseOfTheDayLocal());
+  }, []);
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [mobileSelectorOpen, setMobileSelectorOpen] = useState(false);
   const [jumpBook, setJumpBook] = useState("John");
@@ -671,10 +683,10 @@ export default function LibraryView({
 
       {/* Asymmetric Lantern Glow Bento Launchpad */}
       <div className="space-y-2.5 sm:space-y-3">
-        {/* Row 1: Full-Width Read Bible Lantern Glow Hero */}
+        {/* Row 1: Full-Width Read Bible + Verse of the Day Lantern Glow Hero */}
         <button
           type="button"
-          onClick={() => onQuickNavigate("bible")}
+          onClick={() => onOpenScripture(dailyVerse.reference)}
           className="relative w-full text-left overflow-hidden rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 bg-gradient-to-br from-[#211910] via-[#3E2A14] to-[#744D1B] border border-[#DFB164]/50 text-[#FAF7F2] shadow-md hover:shadow-lg hover:border-[#F2CA7E]/75 active:scale-[0.99] transition group"
         >
           {/* Centered top lantern arch halo */}
@@ -686,23 +698,25 @@ export default function LibraryView({
             aria-hidden="true"
             className="pointer-events-none select-none font-serif absolute -bottom-3 right-3 text-6xl font-bold text-[#F7D994]/[0.08] leading-none"
           >
-            119
+            {dailyVerse.shortRef}
           </span>
           <div className="relative z-10 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#F7D58A]/18 border border-[#F7D58A]/40 text-[#F7D994] flex items-center justify-center shrink-0 shadow-inner">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#F7D58A]/18 border border-[#F7D58A]/40 text-[#F7D994] flex items-center justify-center shrink-0 shadow-inner mt-0.5">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div className="min-w-0">
                 <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#F2CA7E]">
-                  <Flame className="w-3 h-3 fill-[#F2CA7E]/80" />
-                  <span>Psalm 119 · Daily Reader</span>
+                  <Flame className="w-3 h-3 fill-[#F2CA7E]/80 shrink-0" />
+                  <span className="truncate">
+                    Verse of the Day · {dailyVerse.reference}
+                  </span>
                 </div>
-                <p className="font-serif text-base sm:text-lg font-semibold leading-tight text-[#FAF7F2]">
+                <p className="font-serif text-base sm:text-lg font-semibold leading-tight text-[#FAF7F2] mt-0.5">
                   Read Bible
                 </p>
-                <p className="text-[11px] sm:text-xs text-[#E9DEC9]/85 truncate">
-                  9 translations · Tap any verse for Greek, Hebrew &amp; AI
+                <p className="font-serif italic text-[11px] sm:text-xs text-[#EFE4CE]/90 line-clamp-2 mt-0.5 leading-snug">
+                  &ldquo;{dailyVerse.text}&rdquo;
                 </p>
               </div>
             </div>
