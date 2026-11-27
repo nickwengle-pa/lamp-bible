@@ -358,11 +358,16 @@ const ESCAPED_ALIASES = Object.keys(BOOK_ALIASES)
     alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")
   );
 
+// Uses a universal capturing-group prefix (no lookbehind) for 100% Safari/iOS compatibility.
 // Matches Book/Abbrev + optional "." + Chapter + optional :Verse(s) (including ranges like 29:11-13)
 const SCRIPTURE_REGEX = new RegExp(
-  `(?<![A-Za-z0-9])(${ESCAPED_ALIASES.join("|")})\\.?\\s+(\\d{1,3})(?:\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*\\d{1,3})?)?(?![A-Za-z0-9:])`,
+  `(^|[^A-Za-z0-9])((${ESCAPED_ALIASES.join("|")})\\.?\\s+(\\d{1,3})(?:\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*\\d{1,3})?)?)(?![A-Za-z0-9:])`,
   "gi"
 );
+
+function normalizeSpaces(input: string): string {
+  return input.replace(/&nbsp;|&#160;|&#x0*a0;|\u00a0/gi, " ");
+}
 
 const NON_CHAPTER_FOLLOWERS =
   /^\s+(?:am|pm|days?|weeks?|months?|years?|hours?|minutes?|mins?|seconds?|secs?|times?|people|things?|percent|%|st|nd|rd|th)\b/i;
@@ -437,25 +442,56 @@ function escapeAttr(val: string): string {
  */
 export function extractScriptureReferences(text: string): DetectedScriptureRef[] {
   if (!text) return [];
+  const normalized = normalizeSpaces(text);
   const results: DetectedScriptureRef[] = [];
   const seen = new Set<string>();
 
   SCRIPTURE_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = SCRIPTURE_REGEX.exec(text)) !== null) {
-    const [full, rawBook, chapterStr, verseStr] = match;
-    const trailing = text.slice(
-      match.index + full.length,
-      match.index + full.length + 24
-    );
+  while ((match = SCRIPTURE_REGEX.exec(normalized)) !== null) {
+    const [full, prefix, matchText, rawBook, chapterStr, verseStr] = match;
+    const matchEnd = match.index + full.length;
+    const trailing = normalized.slice(matchEnd, matchEnd + 24);
     const resolved = resolveMatch(rawBook, chapterStr, verseStr, trailing);
-    if (!resolved) continue;
+    if (!resolved) {
+      // Backtrack lastIndex slightly if prefix consumed a boundary character needed by the next match
+      if (prefix) SCRIPTURE_REGEX.lastIndex = match.index + prefix.length;
+      continue;
+    }
     if (!seen.has(resolved.canonical)) {
       seen.add(resolved.canonical);
-      results.push({ matchText: full, ...resolved });
+      results.push({ matchText, ...resolved });
     }
   }
   return results;
+}
+
+/**
+ * Finds all Scripture matches with exact start/end character indices inside a plain text string.
+ * Used by RichNoteModal to highlight & link references inline inside the live editor.
+ */
+export function findScriptureMatchesInText(
+  text: string
+): Array<DetectedScriptureRef & { start: number; end: number }> {
+  if (!text) return [];
+  const normalized = text.replace(/\u00a0/g, " ");
+  const matches: Array<DetectedScriptureRef & { start: number; end: number }> = [];
+
+  SCRIPTURE_REGEX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = SCRIPTURE_REGEX.exec(normalized)) !== null) {
+    const [full, prefix, matchText, rawBook, chapterStr, verseStr] = match;
+    const start = match.index + prefix.length;
+    const end = start + matchText.length;
+    const trailing = normalized.slice(end, end + 24);
+    const resolved = resolveMatch(rawBook, chapterStr, verseStr, trailing);
+    if (!resolved) {
+      if (prefix) SCRIPTURE_REGEX.lastIndex = start;
+      continue;
+    }
+    matches.push({ matchText: text.slice(start, end), start, end, ...resolved });
+  }
+  return matches;
 }
 
 /**
@@ -465,7 +501,15 @@ export function extractScriptureReferences(text: string): DetectedScriptureRef[]
 export function linkifyScriptureInHtml(safeHtml: string): string {
   if (!safeHtml) return "";
 
-  const segments = safeHtml.split(/(<[^>]+>)/g);
+  // Normalize any legacy &nbsp; entities and redundant empty spans before scanning
+  let cleaned = normalizeSpaces(safeHtml);
+  let prev = "";
+  while (prev !== cleaned) {
+    prev = cleaned;
+    cleaned = cleaned.replace(/<span>([^<]*)<\/span>/g, "$1");
+  }
+
+  const segments = cleaned.split(/(<[^>]+>)/g);
   let insideLinkDepth = 0;
 
   return segments
@@ -486,6 +530,8 @@ export function linkifyScriptureInHtml(safeHtml: string): string {
         SCRIPTURE_REGEX,
         (
           full,
+          prefix: string,
+          matchText: string,
           rawBook: string,
           chapterStr: string,
           verseStr: string | undefined,
@@ -500,7 +546,7 @@ export function linkifyScriptureInHtml(safeHtml: string): string {
 
           const refAttr = escapeAttr(resolved.canonical);
           const titleAttr = escapeAttr(`Open ${resolved.canonical} in Bible Reader`);
-          return `<span role="button" tabindex="0" data-scripture-ref="${refAttr}" title="${titleAttr}" class="lamp-scripture-link">${full}</span>`;
+          return `${prefix}<span role="button" tabindex="0" data-scripture-ref="${refAttr}" title="${titleAttr}" class="lamp-scripture-link">${matchText}</span>`;
         }
       );
     })

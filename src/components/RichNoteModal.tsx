@@ -35,6 +35,7 @@ import {
 import {
   DetectedScriptureRef,
   extractScriptureReferences,
+  findScriptureMatchesInText,
 } from "@/lib/scripture-links";
 
 interface RichNoteModalProps {
@@ -72,6 +73,142 @@ const VERSE_HIGHLIGHT_SWATCHES: {
 type BlockStyleId = "p" | "h3" | "h4" | "blockquote";
 type TextSizeId = "sm" | "md" | "lg";
 
+function getCaretOffsets(root: HTMLElement): { start: number; end: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!root.contains(range.commonAncestorContainer)) return null;
+
+  const preStart = range.cloneRange();
+  preStart.selectNodeContents(root);
+  preStart.setEnd(range.startContainer, range.startOffset);
+  const start = preStart.toString().length;
+
+  const preEnd = range.cloneRange();
+  preEnd.selectNodeContents(root);
+  preEnd.setEnd(range.endContainer, range.endOffset);
+  const end = preEnd.toString().length;
+
+  return { start, end };
+}
+
+function restoreCaretOffsets(root: HTMLElement, offsets: { start: number; end: number }) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let pos = 0;
+  let startNode: Node | null = null;
+  let startOff = 0;
+  let endNode: Node | null = null;
+  let endOff = 0;
+
+  let current = walker.nextNode();
+  while (current) {
+    const len = current.textContent?.length ?? 0;
+    if (!startNode && offsets.start <= pos + len) {
+      startNode = current;
+      startOff = Math.max(0, offsets.start - pos);
+    }
+    if (!endNode && offsets.end <= pos + len) {
+      endNode = current;
+      endOff = Math.max(0, offsets.end - pos);
+      break;
+    }
+    pos += len;
+    current = walker.nextNode();
+  }
+
+  if (!startNode) return;
+  try {
+    const range = document.createRange();
+    range.setStart(startNode, startOff);
+    range.setEnd(endNode || startNode, endNode ? endOff : startOff);
+    const sel = window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  } catch {
+    // ignore DOM range restore failures
+  }
+}
+
+/**
+ * Highlights detected Scripture references as inline `.lamp-scripture-link` spans
+ * directly inside the contentEditable editor, preserving the user's exact caret position
+ * and short-circuiting with zero DOM changes if links haven't changed.
+ */
+function syncInlineScriptureLinks(root: HTMLElement): boolean {
+  const existingLinks = Array.from(
+    root.querySelectorAll<HTMLElement>("span.lamp-scripture-link[data-scripture-ref]")
+  );
+  const currentSig = existingLinks
+    .map((n) => `${n.dataset.scriptureRef}:${n.textContent || ""}`)
+    .join("|");
+
+  // Compute expected matches across current plain text
+  const expectedMatches = findScriptureMatchesInText(root.innerText || root.textContent || "");
+  const expectedSig = expectedMatches
+    .map((m) => `${m.canonical}:${m.matchText}`)
+    .join("|");
+
+  if (currentSig === expectedSig) {
+    return false;
+  }
+
+  const savedOffsets = getCaretOffsets(root);
+
+  // Unwrap old inline scripture link spans first
+  for (const span of existingLinks) {
+    const parent = span.parentNode;
+    if (!parent) continue;
+    while (span.firstChild) {
+      parent.insertBefore(span.firstChild, span);
+    }
+    parent.removeChild(span);
+  }
+  root.normalize();
+
+  // Collect all text nodes now and wrap Scripture references inline
+  const textNodes: Text[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (node.textContent && node.textContent.trim()) {
+      textNodes.push(node as Text);
+    }
+    node = walker.nextNode();
+  }
+
+  for (const textNode of textNodes) {
+    const text = textNode.textContent || "";
+    const matches = findScriptureMatchesInText(text);
+    if (!matches.length) continue;
+
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+    for (const m of matches) {
+      if (m.start > cursor) {
+        frag.appendChild(document.createTextNode(text.slice(cursor, m.start)));
+      }
+      const span = document.createElement("span");
+      span.className = "lamp-scripture-link";
+      span.dataset.scriptureRef = m.canonical;
+      span.title = `Click to open ${m.canonical} in Bible Reader`;
+      span.textContent = text.slice(m.start, m.end);
+      frag.appendChild(span);
+      cursor = m.end;
+    }
+    if (cursor < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+    textNode.parentNode?.replaceChild(frag, textNode);
+  }
+
+  if (savedOffsets) {
+    restoreCaretOffsets(root, savedOffsets);
+  }
+  return true;
+}
+
 export default function RichNoteModal({
   open,
   onClose,
@@ -90,6 +227,8 @@ export default function RichNoteModal({
 }: RichNoteModalProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
+  const isComposingRef = useRef(false);
+  const linkSyncTimerRef = useRef<number | null>(null);
 
   const [selectedHighlight, setSelectedHighlight] =
     useState<HighlightColor>(highlightColor);
@@ -104,6 +243,7 @@ export default function RichNoteModal({
   const [wordCount, setWordCount] = useState(0);
   const [hasContent, setHasContent] = useState(false);
   const [detectedRefs, setDetectedRefs] = useState<DetectedScriptureRef[]>([]);
+  const [focusedInlineRef, setFocusedInlineRef] = useState<string | null>(null);
 
   // Active formatting flags for toolbar visual feedback
   const [fmtState, setFmtState] = useState({
@@ -175,6 +315,32 @@ export default function RichNoteModal({
     }
   }, [captureSelection]);
 
+  const scheduleInlineLinkSync = useCallback((immediate = false) => {
+    if (linkSyncTimerRef.current !== null) {
+      window.clearTimeout(linkSyncTimerRef.current);
+      linkSyncTimerRef.current = null;
+    }
+    const run = () => {
+      if (isComposingRef.current) return;
+      const el = editorRef.current;
+      if (!el) return;
+      syncInlineScriptureLinks(el);
+    };
+    if (immediate) {
+      run();
+    } else {
+      linkSyncTimerRef.current = window.setTimeout(run, 420);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (linkSyncTimerRef.current !== null) {
+        window.clearTimeout(linkSyncTimerRef.current);
+      }
+    };
+  }, []);
+
   // Hydrate content whenever the modal opens
   useEffect(() => {
     if (!open) return;
@@ -185,6 +351,7 @@ export default function RichNoteModal({
     setBlockStyle("p");
     setFontChoice("sans");
     setTextSize("md");
+    setFocusedInlineRef(null);
 
     const initialSafe = initialHtml
       ? sanitizeRichNoteHtml(initialHtml, 50000)
@@ -231,6 +398,8 @@ export default function RichNoteModal({
         }
       });
 
+      // Immediately highlight any existing Bible references inline right inside the note
+      syncInlineScriptureLinks(el);
       updateCounts();
 
       // Focus and place caret at end of note
@@ -387,6 +556,7 @@ export default function RichNoteModal({
         document.execCommand("insertText", false, text);
       }
       updateCounts();
+      scheduleInlineLinkSync(true);
       refreshFormatState();
     }
   };
@@ -826,6 +996,40 @@ export default function RichNoteModal({
           )}
         </div>
 
+        {/* Contextual Inline Scripture Jump Bar when clicking a linked verse inside the note */}
+        {focusedInlineRef && onOpenScripture && (
+          <div className="px-4 sm:px-5 py-2 bg-[#F7EAD0] dark:bg-[#332718] border-b border-[#DFC9A3] dark:border-[#4A3A22] flex items-center justify-between gap-2 shrink-0">
+            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5F4114] dark:text-[#F2CA7E] min-w-0 truncate">
+              <BookOpen className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{focusedInlineRef}</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                disabled={saving}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={async () => {
+                  const target = focusedInlineRef;
+                  await handleSave();
+                  onOpenScripture(target);
+                }}
+                className="px-3 py-1 rounded-lg bg-[#9A6B24] hover:bg-[#7B531A] dark:bg-[#DFB164] dark:text-[#141210] text-white text-xs font-semibold transition disabled:opacity-50"
+              >
+                Open in Bible Reader →
+              </button>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setFocusedInlineRef(null)}
+                aria-label="Dismiss link popup"
+                className="p-1 rounded-lg text-[#7B531A] dark:text-[#DFB164] hover:bg-black/5 dark:hover:bg-white/10"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Spacious Rich Writing Canvas */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white dark:bg-[#141210] p-4 sm:p-6">
           <div
@@ -836,6 +1040,31 @@ export default function RichNoteModal({
             aria-multiline="true"
             aria-label="Note content"
             data-placeholder={placeholder}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              isComposingRef.current = false;
+              updateCounts();
+              scheduleInlineLinkSync();
+            }}
+            onClick={async (e) => {
+              const linkEl = (e.target as HTMLElement).closest<HTMLElement>(
+                "[data-scripture-ref]"
+              );
+              const ref = linkEl?.dataset.scriptureRef;
+              if (ref && onOpenScripture) {
+                if (e.metaKey || e.ctrlKey) {
+                  e.preventDefault();
+                  await handleSave();
+                  onOpenScripture(ref);
+                  return;
+                }
+                setFocusedInlineRef(ref);
+              } else {
+                setFocusedInlineRef(null);
+              }
+            }}
             onInput={() => {
               const el = editorRef.current;
               if (el && !richHtmlToPlainText(el.innerHTML) && el.innerHTML.trim() === "<br>") {
@@ -843,10 +1072,14 @@ export default function RichNoteModal({
               }
               updateCounts();
               captureSelection();
+              scheduleInlineLinkSync();
             }}
             onKeyUp={refreshFormatState}
             onMouseUp={refreshFormatState}
-            onBlur={captureSelection}
+            onBlur={() => {
+              captureSelection();
+              scheduleInlineLinkSync(true);
+            }}
             onPaste={handlePaste}
             className="lamp-rich-note min-h-[210px] sm:min-h-[260px] text-base sm:text-[15px] text-[#1C1917] dark:text-[#F5F0E8] focus:outline-none"
           />

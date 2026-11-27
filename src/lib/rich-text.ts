@@ -332,6 +332,8 @@ export function sanitizeRichNoteHtml(raw: string, maxChars = 30000): string {
   if (!raw || typeof raw !== "string") return "";
 
   let html = raw
+    // Normalize non-breaking spaces inserted by contentEditable so Scripture auto-linking & wrapping always work
+    .replace(/&nbsp;|&#160;|&#x0*a0;|\u00a0/gi, " ")
     // Remove HTML comments
     .replace(/<!--[\s\S]*?-->/g, "")
     // Remove dangerous elements AND their inner content
@@ -370,6 +372,13 @@ export function sanitizeRichNoteHtml(raw: string, maxChars = 30000): string {
     }
     return `<${tag}>`;
   });
+
+  // Unwrap redundant classless <span>...</span> left by contentEditable or temporary inline links
+  let prev = "";
+  while (prev !== html) {
+    prev = html;
+    html = html.replace(/<span>([^<]*)<\/span>/g, "$1");
+  }
 
   // Remove empty meaningless formatting wrappers left over by browsers
   html = html.trim();
