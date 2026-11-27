@@ -21,6 +21,7 @@ import {
   Loader2,
   Trash2,
   PenLine,
+  BookOpen,
 } from "lucide-react";
 import { HighlightColor } from "@/lib/types";
 import {
@@ -31,6 +32,10 @@ import {
   richHtmlToPlainText,
   sanitizeRichNoteHtml,
 } from "@/lib/rich-text";
+import {
+  DetectedScriptureRef,
+  extractScriptureReferences,
+} from "@/lib/scripture-links";
 
 interface RichNoteModalProps {
   open: boolean;
@@ -50,6 +55,7 @@ interface RichNoteModalProps {
     highlightColor?: HighlightColor;
   }) => Promise<void> | void;
   onClear?: () => Promise<void> | void;
+  onOpenScripture?: (reference: string) => void;
 }
 
 const VERSE_HIGHLIGHT_SWATCHES: {
@@ -80,6 +86,7 @@ export default function RichNoteModal({
   saving = false,
   onSave,
   onClear,
+  onOpenScripture,
 }: RichNoteModalProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const savedRangeRef = useRef<Range | null>(null);
@@ -96,6 +103,7 @@ export default function RichNoteModal({
   const [textSize, setTextSize] = useState<TextSizeId>("md");
   const [wordCount, setWordCount] = useState(0);
   const [hasContent, setHasContent] = useState(false);
+  const [detectedRefs, setDetectedRefs] = useState<DetectedScriptureRef[]>([]);
 
   // Active formatting flags for toolbar visual feedback
   const [fmtState, setFmtState] = useState({
@@ -113,6 +121,7 @@ export default function RichNoteModal({
     const plain = richHtmlToPlainText(el.innerHTML);
     setHasContent(plain.length > 0);
     setWordCount(plain ? plain.split(/\s+/).filter(Boolean).length : 0);
+    setDetectedRefs(extractScriptureReferences(plain).slice(0, 8));
   }, []);
 
   const captureSelection = useCallback(() => {
@@ -803,6 +812,37 @@ export default function RichNoteModal({
             className="lamp-rich-note min-h-[210px] sm:min-h-[260px] text-base sm:text-[15px] text-[#1C1917] dark:text-[#F5F0E8] focus:outline-none"
           />
         </div>
+
+        {/* Live Detected Scripture Links Bar */}
+        {detectedRefs.length > 0 && (
+          <div className="px-4 sm:px-5 py-2 bg-[#FAF4E8]/85 dark:bg-[#211B14] border-t border-[#E9D7B6] dark:border-[#3A2E1E] flex flex-wrap items-center gap-1.5 shrink-0">
+            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] mr-0.5">
+              <BookOpen className="w-3 h-3" />
+              Scripture Links:
+            </span>
+            {detectedRefs.map((ref) => (
+              <button
+                key={ref.canonical}
+                type="button"
+                disabled={saving}
+                onClick={async () => {
+                  if (!onOpenScripture) return;
+                  await handleSave();
+                  onOpenScripture(ref.canonical);
+                }}
+                title={
+                  onOpenScripture
+                    ? `Save note and open ${ref.canonical} in Bible Reader`
+                    : `${ref.canonical} will be clickable when saved`
+                }
+                className="px-2 py-0.5 rounded-lg bg-white/95 dark:bg-[#17130E] border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] text-[11px] font-semibold text-[#7B531A] dark:text-[#DFB164] inline-flex items-center gap-1 transition disabled:opacity-50"
+              >
+                <span>{ref.canonical}</span>
+                {onOpenScripture && <span className="text-[10px] opacity-75">→</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Bottom Action Footer */}
         <div className="px-4 sm:px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 bg-[#FAF7F2] dark:bg-[#171411] border-t border-[#E6DCCB] dark:border-[#2F2A24] flex flex-wrap items-center justify-between gap-2 shrink-0">

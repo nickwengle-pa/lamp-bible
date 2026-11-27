@@ -49,6 +49,7 @@ import ShareVerseModal from "./ShareVerseModal";
 import BibleAudioPlayer from "./BibleAudioPlayer";
 import RichNoteModal from "./RichNoteModal";
 import { plainTextToSafeHtml, sanitizeRichNoteHtml } from "@/lib/rich-text";
+import { linkifyScriptureInHtml } from "@/lib/scripture-links";
 
 interface InterlinearWord {
   pos: number;
@@ -520,6 +521,18 @@ export default function BibleReaderView({
       setAudioStartToken((n) => n + 1);
     }
   };
+
+  const handleJumpToScriptureRef = useCallback(
+    (ref: string) => {
+      const parsed = parseScriptureReference(ref);
+      if (!parsed) return;
+      closeVerseDrawer();
+      setBook(parsed.book);
+      setChapter(parsed.chapter);
+      setActiveHighlight(parsed.verse);
+    },
+    [closeVerseDrawer]
+  );
 
   const handleQuickJump = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1262,10 +1275,13 @@ export default function BibleReaderView({
               {(() => {
                 const vKey = `${selectedVerse.book_name}:${selectedVerse.chapter}:${selectedVerse.verse}`;
                 const existing = highlights[vKey];
-                const renderedNoteHtml = existing?.noteHtml
+                const rawNoteHtml = existing?.noteHtml
                   ? sanitizeRichNoteHtml(existing.noteHtml)
                   : existing?.note
                   ? plainTextToSafeHtml(existing.note)
+                  : "";
+                const renderedNoteHtml = rawNoteHtml
+                  ? linkifyScriptureInHtml(rawNoteHtml)
                   : "";
                 const hasNoteContent = Boolean(renderedNoteHtml);
                 return (
@@ -1320,10 +1336,29 @@ export default function BibleReaderView({
                         <div
                           role="button"
                           tabIndex={0}
-                          onClick={() => setNoteModalOpen(true)}
+                          onClick={(e) => {
+                            const linkEl = (e.target as HTMLElement).closest<HTMLElement>(
+                              "[data-scripture-ref]"
+                            );
+                            if (linkEl?.dataset.scriptureRef) {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleJumpToScriptureRef(linkEl.dataset.scriptureRef);
+                              return;
+                            }
+                            setNoteModalOpen(true);
+                          }}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
+                              const linkEl = (e.target as HTMLElement).closest<HTMLElement>(
+                                "[data-scripture-ref]"
+                              );
                               e.preventDefault();
+                              if (linkEl?.dataset.scriptureRef) {
+                                e.stopPropagation();
+                                handleJumpToScriptureRef(linkEl.dataset.scriptureRef);
+                                return;
+                              }
                               setNoteModalOpen(true);
                             }
                           }}
@@ -1844,6 +1879,7 @@ export default function BibleReaderView({
                 setSavingMargin(false);
               }
             }}
+            onOpenScripture={handleJumpToScriptureRef}
           />
         );
       })()}

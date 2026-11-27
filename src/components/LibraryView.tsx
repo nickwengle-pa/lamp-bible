@@ -38,6 +38,7 @@ import {
   getVerseOfTheDayUTC,
 } from "@/lib/verse-of-the-day";
 import { plainTextToSafeHtml, sanitizeRichNoteHtml } from "@/lib/rich-text";
+import { linkifyScriptureInHtml } from "@/lib/scripture-links";
 import AskVesselChat from "./AskVesselChat";
 import RichNoteModal from "./RichNoteModal";
 
@@ -599,20 +600,42 @@ export default function LibraryView({
                 </button>
               </div>
               {(() => {
-                const journalHtml = selectedNote.personalNotesHtml
+                const rawJournalHtml = selectedNote.personalNotesHtml
                   ? sanitizeRichNoteHtml(selectedNote.personalNotesHtml, 50000)
                   : selectedNote.personalNotes
                   ? plainTextToSafeHtml(selectedNote.personalNotes)
+                  : "";
+                const journalHtml = rawJournalHtml
+                  ? linkifyScriptureInHtml(rawJournalHtml)
                   : "";
                 if (journalHtml) {
                   return (
                     <div
                       role="button"
                       tabIndex={0}
-                      onClick={() => setJournalModalOpen(true)}
+                      onClick={(e) => {
+                        const linkEl = (e.target as HTMLElement).closest<HTMLElement>(
+                          "[data-scripture-ref]"
+                        );
+                        if (linkEl?.dataset.scriptureRef) {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onOpenScripture(linkEl.dataset.scriptureRef);
+                          return;
+                        }
+                        setJournalModalOpen(true);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
+                          const linkEl = (e.target as HTMLElement).closest<HTMLElement>(
+                            "[data-scripture-ref]"
+                          );
                           e.preventDefault();
+                          if (linkEl?.dataset.scriptureRef) {
+                            e.stopPropagation();
+                            onOpenScripture(linkEl.dataset.scriptureRef);
+                            return;
+                          }
                           setJournalModalOpen(true);
                         }
                       }}
@@ -704,6 +727,7 @@ export default function LibraryView({
           onClear={async () => {
             await handleSaveRichJournal("", "");
           }}
+          onOpenScripture={onOpenScripture}
         />
       </div>
     );
