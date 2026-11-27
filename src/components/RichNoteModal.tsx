@@ -667,7 +667,16 @@ export default function RichNoteModal({
                 <Palette className="w-3.5 h-3.5" />
                 <span>Color</span>
                 <span
-                  className={`w-2.5 h-2.5 rounded-full ${activeInkObj.swatchClass} ring-1 ring-black/15 dark:ring-white/25`}
+                  style={
+                    activeInkObj.editorHex
+                      ? { backgroundColor: activeInkObj.editorHex }
+                      : undefined
+                  }
+                  className={`w-3 h-3 rounded-full shrink-0 ring-1 ring-black/20 dark:ring-white/30 ${
+                    activeInkObj.editorHex
+                      ? ""
+                      : "bg-[#1C1917] dark:bg-[#F5F0E8]"
+                  }`}
                 />
               </button>
 
@@ -690,7 +699,16 @@ export default function RichNoteModal({
                 <Highlighter className="w-3.5 h-3.5" />
                 <span className="hidden xs:inline sm:inline">Mark</span>
                 <span
-                  className={`w-2.5 h-2.5 rounded-full ${activeHlObj.swatchClass}`}
+                  style={
+                    activeHlObj.editorHex
+                      ? { backgroundColor: activeHlObj.editorHex }
+                      : undefined
+                  }
+                  className={`w-3 h-3 rounded-full shrink-0 ${
+                    activeHlObj.editorHex
+                      ? "ring-1 ring-black/20 dark:ring-white/30"
+                      : "bg-transparent border border-dashed border-[#A39A90]"
+                  }`}
                 />
               </button>
             </div>
@@ -746,16 +764,28 @@ export default function RichNoteModal({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleApplyInkColor(c.id)}
-                  className={`px-2 py-1 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${
+                  className={`px-2 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1.5 transition ${
                     activeInkId === c.id
-                      ? "border-[#9A6B24] bg-[#F7EAD0]/75 text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
-                      : "border-[#E6DCCB] dark:border-[#322C26] bg-white dark:bg-[#1D1A17] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
+                      ? "border-[#9A6B24] bg-[#F7EAD0]/75 dark:bg-[#3A2D1B] ring-1 ring-[#9A6B24]/30"
+                      : "border-[#E6DCCB] dark:border-[#322C26] bg-white dark:bg-[#1D1A17] hover:border-[#B88435]"
                   }`}
                 >
                   <span
-                    className={`w-3 h-3 rounded-full ${c.swatchClass} ring-1 ring-black/15 dark:ring-white/25`}
+                    style={
+                      c.editorHex ? { backgroundColor: c.editorHex } : undefined
+                    }
+                    className={`w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/20 dark:ring-white/30 ${
+                      c.editorHex ? "" : "bg-[#1C1917] dark:bg-[#F5F0E8]"
+                    }`}
                   />
-                  <span>{c.label}</span>
+                  <span
+                    style={c.editorHex ? { color: c.editorHex } : undefined}
+                    className={
+                      c.editorHex ? "" : "text-[#1C1917] dark:text-[#F5F0E8]"
+                    }
+                  >
+                    {c.label}
+                  </span>
                 </button>
               ))}
             </div>
@@ -773,13 +803,22 @@ export default function RichNoteModal({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleApplyTextHighlight(h.id)}
-                  className={`px-2 py-1 rounded-lg border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${
+                  className={`px-2 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1.5 transition ${
                     activeHlId === h.id
                       ? "border-[#9A6B24] bg-[#F7EAD0]/75 text-[#7B531A] dark:bg-[#3A2D1B] dark:text-[#DFB164]"
                       : "border-[#E6DCCB] dark:border-[#322C26] bg-white dark:bg-[#1D1A17] text-[#4A433C] dark:text-[#D1C9BE] hover:border-[#B88435]"
                   }`}
                 >
-                  <span className={`w-3 h-3 rounded-full ${h.swatchClass}`} />
+                  <span
+                    style={
+                      h.editorHex ? { backgroundColor: h.editorHex } : undefined
+                    }
+                    className={`w-3.5 h-3.5 rounded-full shrink-0 ${
+                      h.editorHex
+                        ? "ring-1 ring-black/20 dark:ring-white/30"
+                        : "bg-transparent border border-dashed border-[#A39A90]"
+                    }`}
+                  />
                   <span>{h.label}</span>
                 </button>
               ))}
