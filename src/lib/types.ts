@@ -104,6 +104,25 @@ export interface BibleChapterResponse {
   text: string;
 }
 
+export interface AudioBibleTrack {
+  id: string;
+  label: string;
+  narrator: string;
+  url: string;
+  source: "esv" | "helloao" | "api-bible";
+  dramatized?: boolean;
+}
+
+export interface BibleAudioResponse {
+  available: boolean;
+  reference: string;
+  translation: string;
+  tracks: AudioBibleTrack[];
+  expiresAt?: number;
+  reason?: string;
+  suggestedStudioTranslations?: string[];
+}
+
 export interface BibleBook {
   name: string;
   usfm: string;

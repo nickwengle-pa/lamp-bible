@@ -23,6 +23,7 @@ import {
   Mic,
   Share2,
   Volume2,
+  Headphones,
   Star,
   Bookmark,
 } from "lucide-react";
@@ -44,6 +45,7 @@ import { aiHeaders, bibleHeaders } from "@/lib/client-api";
 import { pronounceWord } from "@/lib/pronounce";
 import AskVesselChat from "./AskVesselChat";
 import ShareVerseModal from "./ShareVerseModal";
+import BibleAudioPlayer from "./BibleAudioPlayer";
 
 interface InterlinearWord {
   pos: number;
@@ -195,6 +197,12 @@ export default function BibleReaderView({
   const [wordLexicon, setWordLexicon] = useState<LexiconEntry | null>(null);
   const [loadingLexicon, setLoadingLexicon] = useState(false);
   const [speakingWord, setSpeakingWord] = useState(false);
+
+  // Audio Bible player state
+  const [audioOpen, setAudioOpen] = useState(false);
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioStartToken, setAudioStartToken] = useState(0);
+  const [speakingVerse, setSpeakingVerse] = useState<number | null>(null);
 
   // Monotonic request IDs + AbortControllers prevent stale async responses from overwriting newer selections
   const chapterReqIdRef = useRef(0);
@@ -450,16 +458,24 @@ export default function BibleReaderView({
     }
   };
 
-  // Auto-scroll highlighted verse into view (only in full-screen reader so embedded home view stays at top)
+  // Auto-scroll highlighted or actively spoken verse into view (full-screen reader)
   useEffect(() => {
-    if (embedded || !activeHighlight || !chapterData) return;
-    const el = document.getElementById(`verse-${activeHighlight}`);
+    if (embedded || !chapterData) return;
+    const targetVerse = speakingVerse ?? activeHighlight;
+    if (!targetVerse) return;
+    const el = document.getElementById(`verse-${targetVerse}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [embedded, activeHighlight, chapterData]);
+  }, [embedded, activeHighlight, speakingVerse, chapterData]);
 
-  const handlePrevChapter = () => {
+  const currentBookIdx = BIBLE_BOOKS.findIndex((b) => b.name === book);
+  const hasPrevChapter = chapter > 1 || currentBookIdx > 0;
+  const hasNextChapter =
+    chapter < currentBookObj.chapters ||
+    (currentBookIdx >= 0 && currentBookIdx < BIBLE_BOOKS.length - 1);
+
+  const handlePrevChapter = useCallback(() => {
     if (chapter > 1) {
       setChapter(chapter - 1);
       setActiveHighlight(undefined);
@@ -472,9 +488,9 @@ export default function BibleReaderView({
         setActiveHighlight(undefined);
       }
     }
-  };
+  }, [book, chapter]);
 
-  const handleNextChapter = () => {
+  const handleNextChapter = useCallback(() => {
     if (chapter < currentBookObj.chapters) {
       setChapter(chapter + 1);
       setActiveHighlight(undefined);
@@ -486,6 +502,17 @@ export default function BibleReaderView({
         setChapter(1);
         setActiveHighlight(undefined);
       }
+    }
+  }, [book, chapter, currentBookObj.chapters]);
+
+  const handleToggleAudioPlayer = () => {
+    if (audioOpen) {
+      setAudioOpen(false);
+      setAudioPlaying(false);
+      setSpeakingVerse(null);
+    } else {
+      setAudioOpen(true);
+      setAudioStartToken((n) => n + 1);
     }
   };
 
@@ -679,7 +706,7 @@ export default function BibleReaderView({
         className={
           embedded
             ? "mb-4 pb-3 border-b border-[#E6DCCB] dark:border-[#2A2520]"
-            : "sticky top-0 z-20 -mx-3.5 sm:-mx-4 px-3.5 sm:px-4 py-3 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] mb-6"
+            : "sticky top-[56px] lg:top-0 z-20 -mx-3.5 sm:-mx-4 px-3.5 sm:px-4 py-3 bg-[#FAF7F2]/95 dark:bg-[#141210]/95 backdrop-blur-md border-b border-[#E6DCCB] dark:border-[#2A2520] mb-6"
         }
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -723,9 +750,30 @@ export default function BibleReaderView({
               />
             </form>
 
+            <button
+              type="button"
+              onClick={handleToggleAudioPlayer}
+              aria-expanded={audioOpen}
+              aria-label={audioOpen ? "Hide Audio Bible player" : "Listen to chapter audio"}
+              title="Audio Bible"
+              className={`px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-semibold inline-flex items-center gap-1.5 transition shrink-0 ${
+                audioOpen
+                  ? "bg-[#9A6B24] border-[#9A6B24] text-white dark:bg-[#DFB164] dark:border-[#DFB164] dark:text-[#141210] shadow-sm"
+                  : "border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] hover:border-[#B88435] text-[#5F4114] dark:text-[#DFB164]"
+              }`}
+            >
+              {audioPlaying ? (
+                <Volume2 className="w-3.5 h-3.5 animate-pulse" />
+              ) : (
+                <Headphones className="w-3.5 h-3.5" />
+              )}
+              <span>{audioPlaying ? "Playing" : "Listen"}</span>
+            </button>
+
             <select
               value={translation}
               onChange={(e) => setTranslation(e.target.value)}
+              aria-label="Bible translation"
               className="px-2.5 sm:px-3 py-2 rounded-xl border border-[#E6DCCB] dark:border-[#322C26] bg-[#FDFCFA] dark:bg-[#1D1A17] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#B88435]/40"
             >
               {BIBLE_TRANSLATIONS.map((t) => (
@@ -752,6 +800,31 @@ export default function BibleReaderView({
             )}
           </div>
         </div>
+
+        {/* Audio Bible Sticky Player (inside sticky toolbar in full-screen mode) */}
+        {audioOpen && !embedded && (
+          <BibleAudioPlayer
+            book={book}
+            chapter={chapter}
+            translation={translation}
+            verses={chapterData?.verses || []}
+            loadingChapter={loadingChapter}
+            settings={settings}
+            hasNextChapter={hasNextChapter}
+            hasPrevChapter={hasPrevChapter}
+            onNextChapter={handleNextChapter}
+            onPrevChapter={handlePrevChapter}
+            onSelectTranslation={(nextTrans) => setTranslation(nextTrans)}
+            onSpeakingVerseChange={setSpeakingVerse}
+            onPlayingChange={setAudioPlaying}
+            onClose={() => {
+              setAudioOpen(false);
+              setAudioPlaying(false);
+              setSpeakingVerse(null);
+            }}
+            autoStartToken={audioStartToken}
+          />
+        )}
 
         {/* Book & Chapter Dropdown Picker */}
         {pickerOpen && (
@@ -831,6 +904,33 @@ export default function BibleReaderView({
           </div>
         )}
       </div>
+
+      {/* Audio Bible Sticky Player when Bible Reader is embedded on Home page */}
+      {audioOpen && embedded && (
+        <div className="sticky top-[60px] lg:top-2 z-20 mb-4">
+          <BibleAudioPlayer
+            book={book}
+            chapter={chapter}
+            translation={translation}
+            verses={chapterData?.verses || []}
+            loadingChapter={loadingChapter}
+            settings={settings}
+            hasNextChapter={hasNextChapter}
+            hasPrevChapter={hasPrevChapter}
+            onNextChapter={handleNextChapter}
+            onPrevChapter={handlePrevChapter}
+            onSelectTranslation={(nextTrans) => setTranslation(nextTrans)}
+            onSpeakingVerseChange={setSpeakingVerse}
+            onPlayingChange={setAudioPlaying}
+            onClose={() => {
+              setAudioOpen(false);
+              setAudioPlaying(false);
+              setSpeakingVerse(null);
+            }}
+            autoStartToken={audioStartToken}
+          />
+        </div>
+      )}
 
       {/* Main Split Layout: Scripture + Contextual Insight Drawer */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start min-w-0">
@@ -913,6 +1013,7 @@ export default function BibleReaderView({
               {chapterData?.verses.map((v) => {
                 const isSelected = selectedVerse?.verse === v.verse;
                 const isHighlighted = activeHighlight === v.verse;
+                const isSpeaking = speakingVerse === v.verse;
                 const vKey = `${v.book_name}:${v.chapter}:${v.verse}`;
                 const savedHl = highlights[vKey];
                 const hasNote = Boolean(savedHl?.note);
@@ -923,13 +1024,20 @@ export default function BibleReaderView({
                     id={`verse-${v.verse}`}
                     onClick={() => handleVerseClick(v)}
                     className={`w-full text-left px-2 sm:px-2.5 py-1.5 rounded-xl transition block group ${
-                      isSelected
+                      isSpeaking
+                        ? "ring-1 ring-[#B88435]/80 bg-[#FAF1DF]/90 dark:bg-[#2C2316]/90 pl-3"
+                        : isSelected
                         ? "border-l-2 border-[#9A6B24] bg-[#FAF4E8]/70 dark:bg-[#251E15]/60 pl-3"
                         : "hover:bg-[#FAF5EB]/70 dark:hover:bg-[#25211C]/60"
                     }`}
                   >
                     <sup className="font-sans text-xs font-bold text-[#9A6B24] dark:text-[#DFB164] mr-1.5 select-none inline-flex items-center gap-0.5 align-super">
                       <span>{v.verse}</span>
+                      {isSpeaking && (
+                        <span title="Reading aloud">
+                          <Volume2 className="w-3 h-3 text-[#9A6B24] dark:text-[#DFB164] animate-pulse inline" />
+                        </span>
+                      )}
                       {hasNote && (
                         <span title={`Personal note: ${savedHl?.note}`}>
                           <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-500 inline" />
