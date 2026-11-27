@@ -25,6 +25,7 @@ import {
   Languages,
   ChevronRight,
   PlayCircle,
+  Flame,
   Library as LibraryIcon,
 } from "lucide-react";
 import { AppSettings, NoteSourceType, StudyNote } from "@/lib/types";
@@ -668,115 +669,192 @@ export default function LibraryView({
         )}
       </div>
 
-      {/* Clear 6-Tile Quick-Action Launchpad (Instantly shows what Lamp does!) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+      {/* Asymmetric Lantern Glow Bento Launchpad */}
+      <div className="space-y-2.5 sm:space-y-3">
+        {/* Row 1: Full-Width Read Bible Lantern Glow Hero */}
         <button
           type="button"
           onClick={() => onQuickNavigate("bible")}
-          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
+          className="relative w-full text-left overflow-hidden rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 bg-gradient-to-br from-[#211910] via-[#3E2A14] to-[#744D1B] border border-[#DFB164]/50 text-[#FAF7F2] shadow-md hover:shadow-lg hover:border-[#F2CA7E]/75 active:scale-[0.99] transition group"
         >
-          <div className="h-9 w-9 rounded-xl bg-[#F7EAD0] dark:bg-[#3A2D1B] text-[#9A6B24] dark:text-[#DFB164] flex items-center justify-center shrink-0">
-            <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
-              Read Bible
-            </p>
-            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
-              9 versions · Tap verse
-            </p>
+          {/* Centered top lantern arch halo */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 -top-12 -translate-x-1/2 w-56 h-28 rounded-full bg-[radial-gradient(ellipse,rgba(247,213,138,0.34),transparent_70%)] group-hover:opacity-100 opacity-90 transition"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none select-none font-serif absolute -bottom-3 right-3 text-6xl font-bold text-[#F7D994]/[0.08] leading-none"
+          >
+            119
+          </span>
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-[#F7D58A]/18 border border-[#F7D58A]/40 text-[#F7D994] flex items-center justify-center shrink-0 shadow-inner">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#F2CA7E]">
+                  <Flame className="w-3 h-3 fill-[#F2CA7E]/80" />
+                  <span>Psalm 119 · Daily Reader</span>
+                </div>
+                <p className="font-serif text-base sm:text-lg font-semibold leading-tight text-[#FAF7F2]">
+                  Read Bible
+                </p>
+                <p className="text-[11px] sm:text-xs text-[#E9DEC9]/85 truncate">
+                  9 translations · Tap any verse for Greek, Hebrew &amp; AI
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1.5 rounded-full bg-[#FAF7F2]/14 border border-[#F7D58A]/35 text-[#FAE2AE] text-xs font-semibold shrink-0 group-hover:bg-[#FAF7F2]/22 transition inline-flex items-center gap-1">
+              Read
+              <ChevronRight className="w-3.5 h-3.5" />
+            </span>
           </div>
         </button>
 
-        <button
-          type="button"
-          onClick={() => onQuickNavigate("words")}
-          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
-        >
-          <div className="h-9 w-9 rounded-xl bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
-            <Languages className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
-              Word &amp; Guides
-            </p>
-            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
-              Greek, Hebrew &amp; lessons
-            </p>
-          </div>
-        </button>
+        {/* Row 2: Asymmetric Middle — Tall Word & Guides (Left) + Stacked Capture Tools (Right) */}
+        <div className="grid grid-cols-12 gap-2.5 sm:gap-3 items-stretch">
+          {/* Tall Showcase: Word & Guides */}
+          <button
+            type="button"
+            onClick={() => onQuickNavigate("words")}
+            className="col-span-6 relative text-left overflow-hidden rounded-2xl p-3 sm:p-4 flex flex-col justify-between bg-gradient-to-br from-[#F4F3FF] to-[#E4E1FF] dark:from-[#231E38] dark:to-[#161323] border border-[#D2CCFA] dark:border-[#3D3566] hover:border-[#6366F1]/70 dark:hover:border-[#818CF8]/70 shadow-sm active:scale-[0.985] transition group"
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -left-8 -top-8 w-28 h-28 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.85),transparent_70%)] dark:bg-[radial-gradient(circle,rgba(165,180,252,0.16),transparent_70%)]"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none select-none font-serif absolute -bottom-2.5 right-2 text-[58px] sm:text-[68px] font-bold text-indigo-700/[0.11] dark:text-indigo-300/[0.12] leading-none"
+            >
+              Ω
+            </span>
+            <div className="relative z-10 h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-white/85 dark:bg-black/30 border border-indigo-200/80 dark:border-indigo-400/20 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shadow-sm">
+              <Languages className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="relative z-10 mt-3.5 sm:mt-4 min-w-0">
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300">
+                Original Text
+              </span>
+              <p className="font-serif text-sm sm:text-base font-semibold text-[#1C1917] dark:text-[#F5F0E8] leading-tight mt-0.5">
+                Word &amp; Guides
+              </p>
+              <p className="text-[11px] sm:text-xs text-[#574F47] dark:text-[#C5BFD6] truncate mt-0.5">
+                Greek · Hebrew · Lessons
+              </p>
+            </div>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => onQuickNavigate("record")}
-          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
-        >
-          <div className="h-9 w-9 rounded-xl bg-amber-100/85 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 flex items-center justify-center shrink-0">
-            <Mic className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
-              Record Sermon
-            </p>
-            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
-              Live audio &amp; captions
-            </p>
-          </div>
-        </button>
+          {/* Right Stack: Record Sermon + Scan Bible */}
+          <div className="col-span-6 flex flex-col gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => onQuickNavigate("record")}
+              className="flex-1 relative text-left overflow-hidden rounded-2xl px-3 py-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 sm:gap-3 bg-gradient-to-br from-[#FFF9EE] to-[#FAE7C5] dark:from-[#2C2113] dark:to-[#1C150D] border border-[#EDD09B] dark:border-[#523D1E] hover:border-[#B88435] shadow-sm active:scale-[0.985] transition group"
+            >
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -left-6 -top-6 w-20 h-20 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.8),transparent_70%)] dark:bg-[radial-gradient(circle,rgba(245,194,107,0.14),transparent_70%)]"
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none select-none font-serif absolute -bottom-2 right-2 text-4xl font-bold text-amber-800/[0.10] dark:text-amber-300/[0.10] leading-none"
+              >
+                ◉
+              </span>
+              <div className="relative z-10 h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-white/85 dark:bg-black/30 border border-amber-200/80 dark:border-amber-400/20 text-[#9A6B24] dark:text-[#F5C26B] flex items-center justify-center shrink-0 shadow-sm">
+                <Mic className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+              </div>
+              <div className="relative z-10 min-w-0">
+                <p className="font-serif text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] leading-tight truncate">
+                  Record Sermon
+                </p>
+                <p className="text-[11px] text-[#6B5B45] dark:text-[#C9B79C] truncate">
+                  Live audio &amp; notes
+                </p>
+              </div>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => onQuickNavigate("youtube")}
-          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
-        >
-          <div className="h-9 w-9 rounded-xl bg-rose-100/80 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0">
-            <Youtube className="w-4 h-4 sm:w-5 sm:h-5" />
+            <button
+              type="button"
+              onClick={() => onQuickNavigate("scan")}
+              className="flex-1 relative text-left overflow-hidden rounded-2xl px-3 py-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 sm:gap-3 bg-gradient-to-br from-[#F0FBF5] to-[#D6F2E3] dark:from-[#152A21] dark:to-[#101D17] border border-[#B6E4CB] dark:border-[#244D3B] hover:border-emerald-600/60 dark:hover:border-emerald-400/60 shadow-sm active:scale-[0.985] transition group"
+            >
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -left-6 -top-6 w-20 h-20 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.8),transparent_70%)] dark:bg-[radial-gradient(circle,rgba(110,231,183,0.14),transparent_70%)]"
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none select-none font-serif absolute -bottom-2 right-2 text-4xl font-bold text-emerald-700/[0.11] dark:text-emerald-300/[0.11] leading-none"
+              >
+                א
+              </span>
+              <div className="relative z-10 h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-white/85 dark:bg-black/30 border border-emerald-200/80 dark:border-emerald-400/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 shadow-sm">
+                <Camera className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+              </div>
+              <div className="relative z-10 min-w-0">
+                <p className="font-serif text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] leading-tight truncate">
+                  Scan Bible
+                </p>
+                <p className="text-[11px] text-[#456355] dark:text-[#A9C9BA] truncate">
+                  Snap a printed page
+                </p>
+              </div>
+            </button>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
-              YouTube Study
-            </p>
-            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
-              Paste a sermon link
-            </p>
-          </div>
-        </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => onQuickNavigate("scan")}
-          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
-        >
-          <div className="h-9 w-9 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-            <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
-              Scan Bible
-            </p>
-            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
-              Snap a printed page
-            </p>
-          </div>
-        </button>
+        {/* Row 3: Asymmetric Bottom — YouTube Study (Left 7) + Saved Library (Right 5) */}
+        <div className="grid grid-cols-12 gap-2.5 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => onQuickNavigate("youtube")}
+            className="col-span-7 relative text-left overflow-hidden rounded-2xl px-3 py-2.5 sm:px-3.5 sm:py-3 flex items-center gap-2.5 sm:gap-3 bg-gradient-to-br from-[#FFF3F4] to-[#FDE0E3] dark:from-[#2D181B] dark:to-[#1C1214] border border-[#F4C2C8] dark:border-[#542931] hover:border-rose-500/60 dark:hover:border-rose-400/60 shadow-sm active:scale-[0.985] transition group"
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute -left-6 -top-6 w-20 h-20 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.8),transparent_70%)] dark:bg-[radial-gradient(circle,rgba(253,164,175,0.14),transparent_70%)]"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none select-none font-serif absolute -bottom-2 right-2.5 text-3xl font-bold text-rose-700/[0.11] dark:text-rose-300/[0.11] leading-none"
+            >
+              ▶
+            </span>
+            <div className="relative z-10 h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-white/85 dark:bg-black/30 border border-rose-200/80 dark:border-rose-400/20 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0 shadow-sm">
+              <Youtube className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+            </div>
+            <div className="relative z-10 min-w-0">
+              <p className="font-serif text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] leading-tight truncate">
+                YouTube Study
+              </p>
+              <p className="text-[11px] text-[#6D474D] dark:text-[#CFAEB3] truncate">
+                Paste any sermon link
+              </p>
+            </div>
+          </button>
 
-        <button
-          type="button"
-          onClick={handleOpenSavedLibrary}
-          className="text-left rounded-2xl bg-[#FDFCFA] dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#2F2A24] hover:border-[#B88435] p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3 shadow-sm transition group"
-        >
-          <div className="h-9 w-9 rounded-xl bg-stone-200/80 dark:bg-stone-800 text-[#574F47] dark:text-[#DFB164] flex items-center justify-center shrink-0">
-            <LibraryIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] truncate">
-              Saved Notes ({notes.length})
-            </p>
-            <p className="text-[11px] text-[#6B635B] dark:text-[#A39A90] truncate">
-              Search &amp; series
-            </p>
-          </div>
-        </button>
+          <button
+            type="button"
+            onClick={handleOpenSavedLibrary}
+            className="col-span-5 relative text-left overflow-hidden rounded-2xl px-3 py-2.5 sm:px-3.5 sm:py-3 flex items-center justify-between gap-2 bg-gradient-to-br from-[#FFFDF9] to-[#F5ECDC] dark:from-[#211C16] dark:to-[#181511] border border-[#E4D5BC] dark:border-[#3A3024] hover:border-[#B88435] shadow-sm active:scale-[0.985] transition group"
+          >
+            <div className="min-w-0">
+              <p className="font-serif text-xs sm:text-sm font-semibold text-[#1C1917] dark:text-[#F5F0E8] leading-tight truncate">
+                Library
+              </p>
+              <p className="text-[11px] text-[#7B531A] dark:text-[#DFB164] font-medium truncate">
+                {notes.length} {notes.length === 1 ? "note" : "notes"}
+              </p>
+            </div>
+            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-[#F7EAD0] dark:bg-[#33281A] border border-[#E5CCA0]/80 dark:border-[#4E3B21] text-[#9A6B24] dark:text-[#DFB164] flex items-center justify-center shrink-0">
+              <LibraryIcon className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Collapsible Study Library & Series Drawer (1 sleek bar on phone until expanded; open on desktop) */}
