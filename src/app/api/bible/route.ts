@@ -403,6 +403,12 @@ export async function GET(request: Request) {
         { status: 404 }
       );
     }
+    if (parsed) {
+      data.verses = data.verses.map((v) => ({
+        ...v,
+        book_name: parsed.book,
+      }));
+    }
 
     if (chapterCache.size > 150) {
       const firstKey = chapterCache.keys().next().value;

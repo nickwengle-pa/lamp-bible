@@ -4,7 +4,10 @@ import {
   createSessionToken,
   registerUser,
 } from "@/lib/auth";
-import { migrateLegacyDataToUser } from "@/lib/storage";
+import {
+  ensureDefaultLampHighlight,
+  migrateLegacyDataToUser,
+} from "@/lib/storage";
 
 export async function POST(request: Request) {
   try {
@@ -29,6 +32,7 @@ export async function POST(request: Request) {
     if (isFirstUser) {
       await migrateLegacyDataToUser(user.id);
     }
+    await ensureDefaultLampHighlight(user.id);
 
     const token = await createSessionToken(user.id);
     const res = NextResponse.json({ user }, { status: 201 });

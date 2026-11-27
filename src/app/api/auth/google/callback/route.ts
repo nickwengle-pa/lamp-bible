@@ -5,7 +5,10 @@ import {
   createSessionToken,
   getGoogleOAuthConfig,
 } from "@/lib/auth";
-import { migrateLegacyDataToUser } from "@/lib/storage";
+import {
+  ensureDefaultLampHighlight,
+  migrateLegacyDataToUser,
+} from "@/lib/storage";
 import { OAUTH_STATE_COOKIE } from "../route";
 
 function parseCookie(header: string | null, name: string): string | null {
@@ -178,6 +181,7 @@ export async function GET(request: Request) {
     if (isFirstUser) {
       await migrateLegacyDataToUser(user.id);
     }
+    await ensureDefaultLampHighlight(user.id);
 
     const token = await createSessionToken(user.id);
     const res = NextResponse.redirect(`${origin}/`);

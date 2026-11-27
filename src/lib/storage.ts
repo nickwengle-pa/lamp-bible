@@ -50,6 +50,27 @@ function highlightsMigratedKey(userId?: string): string {
   return userId ? `lamp_u_${userId}_hl_v2` : "lamp_legacy_hl_v2";
 }
 
+const DEFAULT_LAMP_HIGHLIGHT_KEY = "Psalms:119:105";
+
+function defaultLampHighlightSeededKey(userId?: string): string {
+  return userId
+    ? `lamp_u_${userId}_seeded_ps119_v1`
+    : "lamp_legacy_seeded_ps119_v1";
+}
+
+function buildDefaultLampHighlight(): VerseHighlight {
+  const now = new Date().toISOString();
+  return {
+    key: DEFAULT_LAMP_HIGHLIGHT_KEY,
+    book: "Psalms",
+    chapter: 119,
+    verse: 105,
+    color: "gold",
+    note: "Lamp's anchor verse — Your word is a lamp to my feet and a light to my path.",
+    updatedAt: now,
+  };
+}
+
 // Per-scope write queue so concurrent updates in the same runtime never clobber one another
 const writeQueues = new Map<string, Promise<unknown>>();
 
@@ -445,6 +466,62 @@ async function ensureHighlightsMigrated(kv: VesselKV, userId?: string): Promise<
   });
 }
 
+/**
+ * Seeds a warm gold highlight on Psalm 119:105 once per user (new signups & existing users),
+ * without overwriting any existing highlight or re-adding it if the user later clears it.
+ */
+export async function ensureDefaultLampHighlight(userId?: string): Promise<void> {
+  const kv = getKv();
+  if (kv && kv.list) {
+    const markerKey = defaultLampHighlightSeededKey(userId);
+    const alreadySeeded = await kv.get(markerKey);
+    if (alreadySeeded === "1") return;
+
+    await withSerializedWrite(`hl-seed-ps119:${userId || "legacy"}`, async () => {
+      const recheck = await kv.get(markerKey);
+      if (recheck === "1") return;
+
+      await ensureHighlightsMigrated(kv, userId);
+      const recordKey = highlightRecordKey(DEFAULT_LAMP_HIGHLIGHT_KEY, userId);
+      const existing = await kv.get(recordKey);
+      if (!existing) {
+        await kv.put(recordKey, JSON.stringify(buildDefaultLampHighlight()));
+      }
+      await kv.put(markerKey, "1");
+    });
+    return;
+  }
+
+  if (kv) {
+    const markerKey = defaultLampHighlightSeededKey(userId);
+    const alreadySeeded = await kv.get(markerKey);
+    if (alreadySeeded === "1") return;
+    const key = legacyHighlightsKey(userId);
+    const raw = await kv.get(key);
+    let all: Record<string, VerseHighlight> = {};
+    if (raw) {
+      try {
+        all = JSON.parse(raw) as Record<string, VerseHighlight>;
+      } catch {
+        all = {};
+      }
+    }
+    if (!all[DEFAULT_LAMP_HIGHLIGHT_KEY]) {
+      all[DEFAULT_LAMP_HIGHLIGHT_KEY] = buildDefaultLampHighlight();
+      await kv.put(key, JSON.stringify(all));
+    }
+    await kv.put(markerKey, "1");
+    return;
+  }
+
+  const mapKey = legacyHighlightsKey(userId);
+  if (!memoryHighlightsByKey.has(mapKey)) {
+    memoryHighlightsByKey.set(mapKey, {
+      [DEFAULT_LAMP_HIGHLIGHT_KEY]: buildDefaultLampHighlight(),
+    });
+  }
+}
+
 export async function getAllHighlights(
   userId?: string
 ): Promise<Record<string, VerseHighlight>> {
@@ -452,6 +529,7 @@ export async function getAllHighlights(
   if (kv) {
     if (kv.list) {
       await ensureHighlightsMigrated(kv, userId);
+      await ensureDefaultLampHighlight(userId);
       const keys = await listAllKeys(kv, highlightRecordPrefix(userId));
       const out: Record<string, VerseHighlight> = {};
       if (keys.length === 0) return out;
@@ -468,6 +546,7 @@ export async function getAllHighlights(
       return out;
     }
 
+    await ensureDefaultLampHighlight(userId);
     const key = legacyHighlightsKey(userId);
     const raw = await kv.get(key);
     if (!raw) return {};
@@ -477,6 +556,7 @@ export async function getAllHighlights(
       return {};
     }
   }
+  await ensureDefaultLampHighlight(userId);
   return { ...(memoryHighlightsByKey.get(legacyHighlightsKey(userId)) || {}) };
 }
 
