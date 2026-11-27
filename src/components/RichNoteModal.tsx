@@ -243,7 +243,7 @@ export default function RichNoteModal({
   const [wordCount, setWordCount] = useState(0);
   const [hasContent, setHasContent] = useState(false);
   const [detectedRefs, setDetectedRefs] = useState<DetectedScriptureRef[]>([]);
-  const [focusedInlineRef, setFocusedInlineRef] = useState<string | null>(null);
+  const navigatingLinkRef = useRef(false);
 
   // Active formatting flags for toolbar visual feedback
   const [fmtState, setFmtState] = useState({
@@ -351,7 +351,7 @@ export default function RichNoteModal({
     setBlockStyle("p");
     setFontChoice("sans");
     setTextSize("md");
-    setFocusedInlineRef(null);
+    navigatingLinkRef.current = false;
 
     const initialSafe = initialHtml
       ? sanitizeRichNoteHtml(initialHtml, 50000)
@@ -996,40 +996,6 @@ export default function RichNoteModal({
           )}
         </div>
 
-        {/* Contextual Inline Scripture Jump Bar when clicking a linked verse inside the note */}
-        {focusedInlineRef && onOpenScripture && (
-          <div className="px-4 sm:px-5 py-2 bg-[#F7EAD0] dark:bg-[#332718] border-b border-[#DFC9A3] dark:border-[#4A3A22] flex items-center justify-between gap-2 shrink-0">
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5F4114] dark:text-[#F2CA7E] min-w-0 truncate">
-              <BookOpen className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">{focusedInlineRef}</span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                disabled={saving}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={async () => {
-                  const target = focusedInlineRef;
-                  await handleSave();
-                  onOpenScripture(target);
-                }}
-                className="px-3 py-1 rounded-lg bg-[#9A6B24] hover:bg-[#7B531A] dark:bg-[#DFB164] dark:text-[#141210] text-white text-xs font-semibold transition disabled:opacity-50"
-              >
-                Open in Bible Reader →
-              </button>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setFocusedInlineRef(null)}
-                aria-label="Dismiss link popup"
-                className="p-1 rounded-lg text-[#7B531A] dark:text-[#DFB164] hover:bg-black/5 dark:hover:bg-white/10"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Spacious Rich Writing Canvas */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white dark:bg-[#141210] p-4 sm:p-6">
           <div
@@ -1053,16 +1019,19 @@ export default function RichNoteModal({
                 "[data-scripture-ref]"
               );
               const ref = linkEl?.dataset.scriptureRef;
-              if (ref && onOpenScripture) {
-                if (e.metaKey || e.ctrlKey) {
-                  e.preventDefault();
-                  await handleSave();
-                  onOpenScripture(ref);
-                  return;
-                }
-                setFocusedInlineRef(ref);
-              } else {
-                setFocusedInlineRef(null);
+              if (!ref || !onOpenScripture || saving || navigatingLinkRef.current) {
+                return;
+              }
+              const sel = window.getSelection();
+              if (sel && !sel.isCollapsed) return;
+              e.preventDefault();
+              e.stopPropagation();
+              navigatingLinkRef.current = true;
+              try {
+                await handleSave();
+                onOpenScripture(ref);
+              } finally {
+                navigatingLinkRef.current = false;
               }
             }}
             onInput={() => {

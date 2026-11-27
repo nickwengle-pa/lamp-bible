@@ -557,16 +557,17 @@ export default function BibleReaderView({
     }
   };
 
-  // Auto-scroll highlighted or actively spoken verse into view (full-screen reader)
+  // Auto-scroll highlighted or actively spoken verse into view (also in embedded mode when jumping via a note link)
   useEffect(() => {
-    if (embedded || !chapterData) return;
+    if (!chapterData) return;
+    if (embedded && verseReturnStack.length === 0 && !speakingVerse) return;
     const targetVerse = speakingVerse ?? activeHighlight;
     if (!targetVerse) return;
     const el = document.getElementById(`verse-${targetVerse}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [embedded, activeHighlight, speakingVerse, chapterData]);
+  }, [embedded, activeHighlight, speakingVerse, chapterData, verseReturnStack.length]);
 
   const currentBookIdx = BIBLE_BOOKS.findIndex((b) => b.name === book);
   const hasPrevChapter = chapter > 1 || currentBookIdx > 0;
@@ -1013,9 +1014,9 @@ export default function BibleReaderView({
           </div>
         </div>
 
-        {/* Sticky One-Tap "Back to Note" Return Bar (when jumping from a Margin Note or Study Library Note) */}
+        {/* High-Visibility Sticky "Back to Note" Return Bar */}
         {(verseReturnStack.length > 0 || returnToLibraryNote) && (
-          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-[#FAF4E8] dark:bg-[#261E14] border border-[#DFC9A3] dark:border-[#4A3A22] px-3 py-2 shadow-sm">
+          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-[#9A6B24] dark:bg-[#DFB164] text-white dark:text-[#141210] px-3.5 py-2 shadow-md">
             {verseReturnStack.length > 0 ? (
               (() => {
                 const top = verseReturnStack[verseReturnStack.length - 1];
@@ -1024,19 +1025,18 @@ export default function BibleReaderView({
                     <button
                       type="button"
                       onClick={handleReturnToPreviousVerse}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] hover:underline min-w-0 truncate"
+                      className="flex-1 text-left inline-flex items-center gap-2 text-xs font-bold hover:opacity-90 min-w-0 truncate"
                     >
-                      <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                      <ArrowLeft className="w-4 h-4 shrink-0" />
                       <span className="truncate">
                         Back to {top.book} {top.chapter}:{top.verse} Note
-                        {top.reopenNoteModal ? " (Editor)" : ""}
                       </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setVerseReturnStack([])}
                       aria-label="Dismiss back to note bar"
-                      className="p-1 rounded-lg text-[#8C7B63] hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
+                      className="p-1 rounded-lg hover:bg-black/15 shrink-0"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -1048,9 +1048,9 @@ export default function BibleReaderView({
                 <button
                   type="button"
                   onClick={() => onReturnToLibraryNote?.()}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] hover:underline min-w-0 truncate"
+                  className="flex-1 text-left inline-flex items-center gap-2 text-xs font-bold hover:opacity-90 min-w-0 truncate"
                 >
-                  <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                  <ArrowLeft className="w-4 h-4 shrink-0" />
                   <span className="truncate">
                     Back to Note: {returnToLibraryNote.title}
                   </span>
@@ -1059,7 +1059,7 @@ export default function BibleReaderView({
                   type="button"
                   onClick={() => onDismissReturnLibraryNote?.()}
                   aria-label="Dismiss back to note bar"
-                  className="p-1 rounded-lg text-[#8C7B63] hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
+                  className="p-1 rounded-lg hover:bg-black/15 shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -2121,6 +2121,62 @@ export default function BibleReaderView({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Always-Reachable Floating Bottom "Back to Note" Pill (works on mobile & desktop, even when scrolled) */}
+      {!selectedVerse && (verseReturnStack.length > 0 || returnToLibraryNote) && (
+        <div className="fixed left-3 right-3 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 bottom-[calc(4.6rem+env(safe-area-inset-bottom))] lg:bottom-6 z-40 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto inline-flex items-center gap-1.5 max-w-full rounded-full bg-[#1C1917]/95 dark:bg-[#DFB164] text-[#FAF7F2] dark:text-[#141210] border border-[#DFB164]/70 dark:border-[#9A6B24] shadow-2xl backdrop-blur-md pl-3.5 pr-1.5 py-2">
+            {verseReturnStack.length > 0 ? (
+              (() => {
+                const top = verseReturnStack[verseReturnStack.length - 1];
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleReturnToPreviousVerse}
+                      className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold min-w-0 truncate active:scale-95 transition"
+                    >
+                      <ArrowLeft className="w-4 h-4 text-[#DFB164] dark:text-[#141210] shrink-0" />
+                      <span className="truncate">
+                        Back to {top.book} {top.chapter}:{top.verse} Note
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVerseReturnStack([])}
+                      aria-label="Dismiss back to note"
+                      className="p-1.5 rounded-full text-[#D2C5B2] dark:text-[#3A2D1B] hover:bg-white/10 dark:hover:bg-black/10 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                );
+              })()
+            ) : returnToLibraryNote ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onReturnToLibraryNote?.()}
+                  className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold min-w-0 truncate active:scale-95 transition"
+                >
+                  <ArrowLeft className="w-4 h-4 text-[#DFB164] dark:text-[#141210] shrink-0" />
+                  <span className="truncate">
+                    Back to Note: {returnToLibraryNote.title}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDismissReturnLibraryNote?.()}
+                  aria-label="Dismiss back to note"
+                  className="p-1.5 rounded-full text-[#D2C5B2] dark:text-[#3A2D1B] hover:bg-white/10 dark:hover:bg-black/10 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
       )}
