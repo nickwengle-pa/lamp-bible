@@ -384,7 +384,13 @@ export default function AuthScreen({
         </form>
 
         <p className="text-[11px] text-center text-[#8C8278]">
-          Each profile has its own private study library, sermon notes, Bible highlights, and margin notes.
+          Each profile has its own private study library, sermon notes, Bible highlights, and margin notes.{" "}
+          <a
+            href="/privacy"
+            className="underline hover:text-[#9A6B24] dark:hover:text-[#DFB164]"
+          >
+            Privacy Policy
+          </a>
         </p>
       </div>
     </div>
