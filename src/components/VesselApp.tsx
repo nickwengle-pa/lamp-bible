@@ -107,6 +107,14 @@ export default function VesselApp() {
     translation?: string;
   }>({ book: "John", chapter: 1, verse: 1 });
 
+  // Remembers the Study Library note the user jumped from so they can return in 1 tap
+  const [returnLibraryNote, setReturnLibraryNote] = useState<{
+    id: string;
+    title: string;
+    reopenEditor?: boolean;
+  } | null>(null);
+  const [reopenJournalOnOpen, setReopenJournalOnOpen] = useState(false);
+
   useEffect(() => {
     const theme = loadThemePreference();
     setSettings({ ...DEFAULT_SETTINGS, theme });
@@ -241,6 +249,7 @@ export default function VesselApp() {
     setNotes([]);
     setHighlights({});
     setSelectedNoteId(null);
+    setReturnLibraryNote(null);
     setSettingsOpen(false);
     setMobileMenuOpen(false);
     setTheologyNotes("");
@@ -362,7 +371,10 @@ export default function VesselApp() {
     }
   };
 
-  const handleOpenScripture = (reference: string) => {
+  const handleOpenScripture = (
+    reference: string,
+    fromNote?: { id: string; title: string; reopenEditor?: boolean }
+  ) => {
     const parsed = parseScriptureReference(reference);
     if (parsed) {
       setBibleTarget((prev) => ({
@@ -372,10 +384,21 @@ export default function VesselApp() {
         translation: prev.translation,
       }));
     }
+    setReturnLibraryNote(fromNote || null);
     setActiveTab("bible");
   };
 
+  const handleReturnToLibraryNote = () => {
+    if (!returnLibraryNote) return;
+    const target = returnLibraryNote;
+    setSelectedNoteId(target.id);
+    setReopenJournalOnOpen(Boolean(target.reopenEditor));
+    setReturnLibraryNote(null);
+    setActiveTab("library");
+  };
+
   const handleOpenLibraryNote = (noteId: string) => {
+    setReturnLibraryNote(null);
     setSelectedNoteId(noteId);
     setActiveTab("library");
   };
@@ -710,6 +733,8 @@ export default function VesselApp() {
                 onUpdateNote={handleUpdateNote}
                 onDeleteNote={handleDeleteNote}
                 onOpenScripture={handleOpenScripture}
+                reopenJournalOnOpen={reopenJournalOnOpen}
+                onConsumedReopenJournal={() => setReopenJournalOnOpen(false)}
                 onQuickNavigate={(tab) => setActiveTab(tab)}
                 onOpenGuide={() => setGuideOpen(true)}
               />
@@ -790,6 +815,9 @@ export default function VesselApp() {
               onOpenLibraryNote={handleOpenLibraryNote}
               onSaveVerseNote={handleSaveManualNote}
               onOpenSettings={() => setSettingsOpen(true)}
+              returnToLibraryNote={returnLibraryNote}
+              onReturnToLibraryNote={handleReturnToLibraryNote}
+              onDismissReturnLibraryNote={() => setReturnLibraryNote(null)}
             />
           )}
 

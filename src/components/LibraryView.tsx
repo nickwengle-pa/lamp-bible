@@ -51,7 +51,12 @@ interface LibraryViewProps {
   onSelectNote: (id: string | null) => void;
   onUpdateNote: (id: string, updates: Partial<StudyNote>) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
-  onOpenScripture: (reference: string) => void;
+  onOpenScripture: (
+    reference: string,
+    fromNote?: { id: string; title: string; reopenEditor?: boolean }
+  ) => void;
+  reopenJournalOnOpen?: boolean;
+  onConsumedReopenJournal?: () => void;
   onQuickNavigate: (tab: "words" | "record" | "youtube" | "bible" | "scan") => void;
   onOpenGuide?: () => void;
 }
@@ -140,6 +145,8 @@ export default function LibraryView({
   onUpdateNote,
   onDeleteNote,
   onOpenScripture,
+  reopenJournalOnOpen = false,
+  onConsumedReopenJournal,
   onQuickNavigate,
   onOpenGuide,
 }: LibraryViewProps) {
@@ -199,9 +206,14 @@ export default function LibraryView({
     if (selectedNote) {
       setSeriesDraft(selectedNote.series || "");
       setShowTranscript(false);
-      setJournalModalOpen(false);
+      if (reopenJournalOnOpen) {
+        setJournalModalOpen(true);
+        onConsumedReopenJournal?.();
+      } else {
+        setJournalModalOpen(false);
+      }
     }
-  }, [selectedNote?.id]);
+  }, [selectedNote?.id, reopenJournalOnOpen, onConsumedReopenJournal]);
 
   const sectionCounts = useMemo(() => {
     const counts: Record<LibrarySection, number> = {
@@ -459,7 +471,12 @@ export default function LibraryView({
                   {selectedNote.scriptureReferences.map((ref, idx) => (
                     <button
                       key={`${ref.reference}-${idx}`}
-                      onClick={() => onOpenScripture(ref.reference)}
+                      onClick={() =>
+                        onOpenScripture(ref.reference, {
+                          id: selectedNote.id,
+                          title: selectedNote.title,
+                        })
+                      }
                       className="text-left p-3.5 rounded-xl border border-[#E6DCCB] dark:border-[#2F2A24] bg-white dark:bg-[#171411] hover:border-[#B88435] hover:shadow-sm transition group"
                     >
                       <div className="flex items-center justify-between">
@@ -620,7 +637,10 @@ export default function LibraryView({
                         if (linkEl?.dataset.scriptureRef) {
                           e.stopPropagation();
                           e.preventDefault();
-                          onOpenScripture(linkEl.dataset.scriptureRef);
+                          onOpenScripture(linkEl.dataset.scriptureRef, {
+                            id: selectedNote.id,
+                            title: selectedNote.title,
+                          });
                           return;
                         }
                         setJournalModalOpen(true);
@@ -633,7 +653,10 @@ export default function LibraryView({
                           e.preventDefault();
                           if (linkEl?.dataset.scriptureRef) {
                             e.stopPropagation();
-                            onOpenScripture(linkEl.dataset.scriptureRef);
+                            onOpenScripture(linkEl.dataset.scriptureRef, {
+                              id: selectedNote.id,
+                              title: selectedNote.title,
+                            });
                             return;
                           }
                           setJournalModalOpen(true);
@@ -727,7 +750,13 @@ export default function LibraryView({
           onClear={async () => {
             await handleSaveRichJournal("", "");
           }}
-          onOpenScripture={onOpenScripture}
+          onOpenScripture={(ref) =>
+            onOpenScripture(ref, {
+              id: selectedNote.id,
+              title: selectedNote.title,
+              reopenEditor: true,
+            })
+          }
         />
       </div>
     );

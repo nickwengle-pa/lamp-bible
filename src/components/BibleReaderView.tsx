@@ -27,6 +27,8 @@ import {
   Star,
   Bookmark,
   PenLine,
+  ArrowLeft,
+  Link2,
 } from "lucide-react";
 import {
   AppSettings,
@@ -49,7 +51,10 @@ import ShareVerseModal from "./ShareVerseModal";
 import BibleAudioPlayer from "./BibleAudioPlayer";
 import RichNoteModal from "./RichNoteModal";
 import { plainTextToSafeHtml, sanitizeRichNoteHtml } from "@/lib/rich-text";
-import { linkifyScriptureInHtml } from "@/lib/scripture-links";
+import {
+  extractScriptureReferences,
+  linkifyScriptureInHtml,
+} from "@/lib/scripture-links";
 
 interface InterlinearWord {
   pos: number;
@@ -98,6 +103,13 @@ interface BibleReaderViewProps {
     verse?: number;
     translation: string;
   }) => void;
+  returnToLibraryNote?: {
+    id: string;
+    title: string;
+    reopenEditor?: boolean;
+  } | null;
+  onReturnToLibraryNote?: () => void;
+  onDismissReturnLibraryNote?: () => void;
 }
 
 const HIGHLIGHT_STYLES: Record<
@@ -141,6 +153,9 @@ export default function BibleReaderView({
   onOpenSettings,
   embedded = false,
   onExpandFullScreen,
+  returnToLibraryNote = null,
+  onReturnToLibraryNote,
+  onDismissReturnLibraryNote,
 }: BibleReaderViewProps) {
   const [book, setBook] = useState(initialBook || "John");
   const [chapter, setChapter] = useState(initialChapter || 1);
@@ -209,6 +224,22 @@ export default function BibleReaderView({
   const [audioStartToken, setAudioStartToken] = useState(0);
   const [speakingVerse, setSpeakingVerse] = useState<number | null>(null);
 
+  // One-tap Back-to-Note history stack when jumping via Scripture links in margin notes
+  const [verseReturnStack, setVerseReturnStack] = useState<
+    {
+      book: string;
+      chapter: number;
+      verse: number;
+      reopenNoteModal?: boolean;
+    }[]
+  >([]);
+  const pendingReopenVerseRef = useRef<{
+    book: string;
+    chapter: number;
+    verse: number;
+    reopenNoteModal?: boolean;
+  } | null>(null);
+
   // Monotonic request IDs + AbortControllers prevent stale async responses from overwriting newer selections
   const chapterReqIdRef = useRef(0);
   const chapterAbortRef = useRef<AbortController | null>(null);
@@ -216,28 +247,90 @@ export default function BibleReaderView({
   const verseAbortRef = useRef<AbortController | null>(null);
   const lexiconReqIdRef = useRef(0);
 
-  // Cross-link saved sermons/studies referencing this chapter & map to specific verses!
-  const { relatedNotes, verseStudyMap } = React.useMemo(() => {
+  // Two-way cross-links: scans Study Library scriptureReferences, Study Library personalNotes,
+  // AND Verse Margin Notes referencing this chapter or specific verses!
+  const {
+    relatedNotes,
+    verseStudyMap,
+    backlinkedMarginNotes,
+    verseBacklinkMap,
+  } = React.useMemo(() => {
     const matched: { note: StudyNote; verse?: number; reference: string }[] = [];
     const byVerse = new Map<number, StudyNote[]>();
+
+    const recordStudyMatch = (
+      n: StudyNote,
+      refText: string,
+      targetVerse?: number
+    ) => {
+      if (!matched.some((m) => m.note.id === n.id)) {
+        matched.push({ note: n, verse: targetVerse, reference: refText });
+      }
+      const vNum = targetVerse ?? 1;
+      const existing = byVerse.get(vNum) || [];
+      if (!existing.some((item) => item.id === n.id)) {
+        byVerse.set(vNum, [...existing, n]);
+      }
+    };
 
     for (const n of notes) {
       for (const ref of n.scriptureReferences || []) {
         const parsed = parseScriptureReference(ref.reference);
         if (parsed && parsed.book === book && parsed.chapter === chapter) {
-          if (!matched.some((m) => m.note.id === n.id)) {
-            matched.push({ note: n, verse: parsed.verse, reference: ref.reference });
-          }
-          const targetVerse = parsed.verse ?? 1;
-          const existing = byVerse.get(targetVerse) || [];
-          if (!existing.some((item) => item.id === n.id)) {
-            byVerse.set(targetVerse, [...existing, n]);
+          recordStudyMatch(n, ref.reference, parsed.verse);
+        }
+      }
+      if (n.personalNotes) {
+        for (const detected of extractScriptureReferences(n.personalNotes)) {
+          if (detected.book === book && detected.chapter === chapter) {
+            recordStudyMatch(n, detected.canonical, detected.verse);
           }
         }
       }
     }
-    return { relatedNotes: matched, verseStudyMap: byVerse };
-  }, [notes, book, chapter]);
+
+    // Two-way backlinks from your other Verse Margin Notes that mention this chapter/verse
+    const marginLinks: {
+      source: VerseHighlight;
+      targetVerse?: number;
+      reference: string;
+    }[] = [];
+    const marginByVerse = new Map<number, VerseHighlight[]>();
+
+    for (const h of Object.values(highlights)) {
+      if (!h.note) continue;
+      for (const detected of extractScriptureReferences(h.note)) {
+        if (detected.book !== book || detected.chapter !== chapter) continue;
+        // Skip self-link to the exact same verse
+        if (
+          h.book === book &&
+          h.chapter === chapter &&
+          detected.verse === h.verse
+        ) {
+          continue;
+        }
+        if (!marginLinks.some((m) => m.source.key === h.key)) {
+          marginLinks.push({
+            source: h,
+            targetVerse: detected.verse,
+            reference: detected.canonical,
+          });
+        }
+        const vNum = detected.verse ?? 1;
+        const existing = marginByVerse.get(vNum) || [];
+        if (!existing.some((item) => item.key === h.key)) {
+          marginByVerse.set(vNum, [...existing, h]);
+        }
+      }
+    }
+
+    return {
+      relatedNotes: matched,
+      verseStudyMap: byVerse,
+      backlinkedMarginNotes: marginLinks,
+      verseBacklinkMap: marginByVerse,
+    };
+  }, [notes, highlights, book, chapter]);
 
   const chapterHasNotes = React.useMemo(() => {
     return Object.values(highlights).some(
@@ -523,15 +616,34 @@ export default function BibleReaderView({
   };
 
   const handleJumpToScriptureRef = useCallback(
-    (ref: string) => {
+    (ref: string, options?: { fromEditor?: boolean; reopenTargetNote?: boolean }) => {
       const parsed = parseScriptureReference(ref);
       if (!parsed) return;
+      if (selectedVerse) {
+        setVerseReturnStack((prev) => [
+          ...prev.slice(-7),
+          {
+            book: selectedVerse.book_name,
+            chapter: selectedVerse.chapter,
+            verse: selectedVerse.verse,
+            reopenNoteModal: Boolean(options?.fromEditor),
+          },
+        ]);
+      }
+      if (options?.reopenTargetNote && parsed.verse) {
+        pendingReopenVerseRef.current = {
+          book: parsed.book,
+          chapter: parsed.chapter,
+          verse: parsed.verse,
+          reopenNoteModal: false,
+        };
+      }
       closeVerseDrawer();
       setBook(parsed.book);
       setChapter(parsed.chapter);
       setActiveHighlight(parsed.verse);
     },
-    [closeVerseDrawer]
+    [closeVerseDrawer, selectedVerse]
   );
 
   const handleQuickJump = (e: React.FormEvent) => {
@@ -583,7 +695,10 @@ export default function BibleReaderView({
     }
   };
 
-  const handleVerseClick = async (v: BibleVerse) => {
+  const handleVerseClick = async (
+    v: BibleVerse,
+    options?: { openNoteModal?: boolean }
+  ) => {
     const reqId = ++verseReqIdRef.current;
     verseAbortRef.current?.abort();
     const controller = new AbortController();
@@ -598,7 +713,7 @@ export default function BibleReaderView({
     setSheetDragY(0);
     setIsDraggingSheet(false);
     setSelectedVerseTranslation(loadedTranslation);
-    setNoteModalOpen(false);
+    setNoteModalOpen(Boolean(options?.openNoteModal));
     setInsight(null);
     setInsightError(null);
     setSavedVerseSuccess(false);
@@ -664,6 +779,86 @@ export default function BibleReaderView({
         setLoadingInsight(false);
       }
     }
+  };
+
+  // Reopen origin verse (and Note Studio if applicable) automatically after returning from a linked passage
+  useEffect(() => {
+    const target = pendingReopenVerseRef.current;
+    if (!target || loadingChapter || !chapterData?.verses?.length) return;
+    const first = chapterData.verses[0];
+    if (first?.book_name === target.book && first?.chapter === target.chapter) {
+      const found = chapterData.verses.find((v) => v.verse === target.verse);
+      pendingReopenVerseRef.current = null;
+      if (found) {
+        void handleVerseClick(found, {
+          openNoteModal: Boolean(target.reopenNoteModal),
+        });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterData, loadingChapter]);
+
+  const handleReturnToPreviousVerse = () => {
+    const origin = verseReturnStack[verseReturnStack.length - 1];
+    if (!origin) return;
+    setVerseReturnStack((prev) => prev.slice(0, -1));
+
+    const alreadyLoaded =
+      chapterData?.verses?.[0]?.book_name === origin.book &&
+      chapterData?.verses?.[0]?.chapter === origin.chapter;
+
+    if (alreadyLoaded) {
+      const found = chapterData.verses.find((v) => v.verse === origin.verse);
+      setActiveHighlight(origin.verse);
+      if (found) {
+        void handleVerseClick(found, {
+          openNoteModal: Boolean(origin.reopenNoteModal),
+        });
+      }
+      return;
+    }
+
+    pendingReopenVerseRef.current = origin;
+    closeVerseDrawer();
+    setBook(origin.book);
+    setChapter(origin.chapter);
+    setActiveHighlight(origin.verse);
+  };
+
+  const handleOpenBacklinkedMarginNote = (source: VerseHighlight) => {
+    const alreadyLoaded =
+      chapterData?.verses?.[0]?.book_name === source.book &&
+      chapterData?.verses?.[0]?.chapter === source.chapter;
+
+    if (selectedVerse) {
+      setVerseReturnStack((prev) => [
+        ...prev.slice(-7),
+        {
+          book: selectedVerse.book_name,
+          chapter: selectedVerse.chapter,
+          verse: selectedVerse.verse,
+        },
+      ]);
+    }
+
+    if (alreadyLoaded) {
+      const found = chapterData.verses.find((v) => v.verse === source.verse);
+      setActiveHighlight(source.verse);
+      if (found) {
+        void handleVerseClick(found);
+      }
+      return;
+    }
+
+    pendingReopenVerseRef.current = {
+      book: source.book,
+      chapter: source.chapter,
+      verse: source.verse,
+    };
+    closeVerseDrawer();
+    setBook(source.book);
+    setChapter(source.chapter);
+    setActiveHighlight(source.verse);
   };
 
   const handleSaveInsightToLibrary = async () => {
@@ -817,6 +1012,61 @@ export default function BibleReaderView({
             )}
           </div>
         </div>
+
+        {/* Sticky One-Tap "Back to Note" Return Bar (when jumping from a Margin Note or Study Library Note) */}
+        {(verseReturnStack.length > 0 || returnToLibraryNote) && (
+          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-[#FAF4E8] dark:bg-[#261E14] border border-[#DFC9A3] dark:border-[#4A3A22] px-3 py-2 shadow-sm">
+            {verseReturnStack.length > 0 ? (
+              (() => {
+                const top = verseReturnStack[verseReturnStack.length - 1];
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleReturnToPreviousVerse}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] hover:underline min-w-0 truncate"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        Back to {top.book} {top.chapter}:{top.verse} Note
+                        {top.reopenNoteModal ? " (Editor)" : ""}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVerseReturnStack([])}
+                      aria-label="Dismiss back to note bar"
+                      className="p-1 rounded-lg text-[#8C7B63] hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                );
+              })()
+            ) : returnToLibraryNote ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onReturnToLibraryNote?.()}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#7B531A] dark:text-[#DFB164] hover:underline min-w-0 truncate"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
+                    Back to Note: {returnToLibraryNote.title}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDismissReturnLibraryNote?.()}
+                  aria-label="Dismiss back to note bar"
+                  className="p-1 rounded-lg text-[#8C7B63] hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
 
         {/* Audio Bible Sticky Player (inside sticky toolbar in full-screen mode) */}
         {audioOpen && !embedded && (
@@ -983,28 +1233,56 @@ export default function BibleReaderView({
             <Sparkles className="w-5 h-5 text-[#B88435]/70" />
           </div>
 
-          {/* Cross-linked Sermons & Studies referencing this chapter */}
-          {relatedNotes.length > 0 && (
-            <div className="mb-6 rounded-2xl bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] p-3.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] flex items-center gap-1.5 mb-2">
-                <Mic className="w-3.5 h-3.5" />
-                Referenced in Your Study Library
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {relatedNotes.map(({ note, reference }) => (
-                  <button
-                    key={note.id}
-                    onClick={() => onOpenLibraryNote(note.id)}
-                    className="text-left px-3 py-1.5 rounded-xl bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] hover:border-[#B88435] text-xs font-medium inline-flex items-center gap-1.5 transition"
-                  >
-                    <span className="text-[#9A6B24] dark:text-[#DFB164] font-semibold">
-                      {reference}
-                    </span>
-                    <span className="text-[#6B635B] dark:text-[#A39A90]">·</span>
-                    <span className="truncate max-w-[200px]">{note.title}</span>
-                  </button>
-                ))}
-              </div>
+          {/* Cross-linked Sermons, Studies & Margin Notes referencing this chapter */}
+          {(relatedNotes.length > 0 || backlinkedMarginNotes.length > 0) && (
+            <div className="mb-6 rounded-2xl bg-[#FAF7F2] dark:bg-[#141210] border border-[#E6DCCB] dark:border-[#2F2A24] p-3.5 space-y-3">
+              {relatedNotes.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] flex items-center gap-1.5 mb-2">
+                    <Mic className="w-3.5 h-3.5" />
+                    Referenced in Your Study Library
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {relatedNotes.map(({ note, reference }) => (
+                      <button
+                        key={note.id}
+                        onClick={() => onOpenLibraryNote(note.id)}
+                        className="text-left px-3 py-1.5 rounded-xl bg-white dark:bg-[#1D1A17] border border-[#E6DCCB] dark:border-[#322C26] hover:border-[#B88435] text-xs font-medium inline-flex items-center gap-1.5 transition"
+                      >
+                        <span className="text-[#9A6B24] dark:text-[#DFB164] font-semibold">
+                          {reference}
+                        </span>
+                        <span className="text-[#6B635B] dark:text-[#A39A90]">·</span>
+                        <span className="truncate max-w-[200px]">{note.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {backlinkedMarginNotes.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] flex items-center gap-1.5 mb-2">
+                    <Link2 className="w-3.5 h-3.5" />
+                    Linked From Your Verse Notes
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {backlinkedMarginNotes.map(({ source, reference }) => (
+                      <button
+                        key={source.key}
+                        type="button"
+                        onClick={() => handleOpenBacklinkedMarginNote(source)}
+                        className="text-left px-3 py-1.5 rounded-xl bg-white dark:bg-[#1D1A17] border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] text-xs font-medium inline-flex items-center gap-1.5 transition"
+                      >
+                        <span className="text-[#9A6B24] dark:text-[#DFB164] font-semibold">
+                          {source.book} {source.chapter}:{source.verse}
+                        </span>
+                        <span className="text-[#6B635B] dark:text-[#A39A90]">→ {reference}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1265,6 +1543,35 @@ export default function BibleReaderView({
                         className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#1D1A17] border border-emerald-200 dark:border-emerald-900 text-xs font-medium text-emerald-900 dark:text-emerald-200 hover:underline"
                       >
                         {st.title} →
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Backlinks from your other Verse Margin Notes mentioning this verse */}
+              {(verseBacklinkMap.get(selectedVerse.verse) || []).length > 0 && (
+                <div className="rounded-xl bg-[#FAF4E8]/80 dark:bg-[#261E14] border border-[#E5CCA0] dark:border-[#4A3A22] p-3 space-y-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9A6B24] dark:text-[#DFB164] flex items-center gap-1">
+                    <Link2 className="w-3 h-3" />
+                    Linked From Your Other Verse Notes
+                  </p>
+                  <div className="space-y-1.5">
+                    {(verseBacklinkMap.get(selectedVerse.verse) || []).map((src) => (
+                      <button
+                        key={src.key}
+                        type="button"
+                        onClick={() => handleOpenBacklinkedMarginNote(src)}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg bg-white/90 dark:bg-[#1A1510] border border-[#DFC9A3] dark:border-[#4A3A22] hover:border-[#9A6B24] transition"
+                      >
+                        <span className="text-xs font-semibold text-[#7B531A] dark:text-[#DFB164]">
+                          {src.book} {src.chapter}:{src.verse} →
+                        </span>
+                        {src.note && (
+                          <p className="text-[11px] text-[#6B635B] dark:text-[#BDB4AA] line-clamp-1 mt-0.5">
+                            {src.note}
+                          </p>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -1879,7 +2186,9 @@ export default function BibleReaderView({
                 setSavingMargin(false);
               }
             }}
-            onOpenScripture={handleJumpToScriptureRef}
+            onOpenScripture={(ref) =>
+              handleJumpToScriptureRef(ref, { fromEditor: true })
+            }
           />
         );
       })()}
