@@ -1,226 +1,351 @@
 import { BIBLE_BOOKS } from "./bible-books";
 
 export interface DetectedScriptureRef {
-  /** Exact matched display string as written by the user (e.g. "Jn 1:1" or "John 1:1") */
+  /** Exact matched display string as written by the user (e.g. "Jer 29:11" or "Gen. 1:1") */
   matchText: string;
-  /** Canonical reference guaranteed to parse cleanly (e.g. "John 1:1") */
+  /** Canonical reference guaranteed to parse cleanly (e.g. "Jeremiah 29:11") */
   canonical: string;
   book: string;
   chapter: number;
   verse?: number;
 }
 
-/**
- * Common English Bible book aliases mapped to canonical BIBLE_BOOKS names.
- * Only unambiguous aliases are included; ambiguous short words require a ":verse" suffix.
- */
-const BOOK_ALIASES: Record<string, string> = {
-  // OT
-  genesis: "Genesis",
-  gen: "Genesis",
-  ge: "Genesis",
-  exodus: "Exodus",
-  exod: "Exodus",
-  exo: "Exodus",
-  ex: "Exodus",
-  leviticus: "Leviticus",
-  lev: "Leviticus",
-  numbers: "Numbers",
-  num: "Numbers",
-  deuteronomy: "Deuteronomy",
-  deut: "Deuteronomy",
-  dt: "Deuteronomy",
-  joshua: "Joshua",
-  josh: "Joshua",
-  judges: "Judges",
-  judg: "Judges",
-  jdg: "Judges",
-  ruth: "Ruth",
-  "1 samuel": "1 Samuel",
-  "1 sam": "1 Samuel",
-  "1sam": "1 Samuel",
-  "2 samuel": "2 Samuel",
-  "2 sam": "2 Samuel",
-  "2sam": "2 Samuel",
-  "1 kings": "1 Kings",
-  "1 kgs": "1 Kings",
-  "1kgs": "1 Kings",
-  "1 ki": "1 Kings",
-  "2 kings": "2 Kings",
-  "2 kgs": "2 Kings",
-  "2kgs": "2 Kings",
-  "2 ki": "2 Kings",
-  "1 chronicles": "1 Chronicles",
-  "1 chron": "1 Chronicles",
-  "1 chr": "1 Chronicles",
-  "1chr": "1 Chronicles",
-  "2 chronicles": "2 Chronicles",
-  "2 chron": "2 Chronicles",
-  "2 chr": "2 Chronicles",
-  "2chr": "2 Chronicles",
-  ezra: "Ezra",
-  nehemiah: "Nehemiah",
-  neh: "Nehemiah",
-  esther: "Esther",
-  esth: "Esther",
-  job: "Job",
-  psalms: "Psalms",
-  psalm: "Psalms",
-  psa: "Psalms",
-  ps: "Psalms",
-  proverbs: "Proverbs",
-  prov: "Proverbs",
-  pro: "Proverbs",
-  pr: "Proverbs",
-  ecclesiastes: "Ecclesiastes",
-  eccles: "Ecclesiastes",
-  eccl: "Ecclesiastes",
-  ecc: "Ecclesiastes",
-  "song of solomon": "Song of Solomon",
-  "song of songs": "Song of Solomon",
-  song: "Song of Solomon",
-  sos: "Song of Solomon",
-  isaiah: "Isaiah",
-  isa: "Isaiah",
-  jeremiah: "Jeremiah",
-  jer: "Jeremiah",
-  lamentations: "Lamentations",
-  lam: "Lamentations",
-  ezekiel: "Ezekiel",
-  ezek: "Ezekiel",
-  ezk: "Ezekiel",
-  daniel: "Daniel",
-  dan: "Daniel",
-  hosea: "Hosea",
-  hos: "Hosea",
-  joel: "Joel",
-  amos: "Amos",
-  obadiah: "Obadiah",
-  obad: "Obadiah",
-  jonah: "Jonah",
-  jon: "Jonah",
-  micah: "Micah",
-  mic: "Micah",
-  nahum: "Nahum",
-  nah: "Nahum",
-  habakkuk: "Habakkuk",
-  hab: "Habakkuk",
-  zephaniah: "Zephaniah",
-  zeph: "Zephaniah",
-  zep: "Zephaniah",
-  haggai: "Haggai",
-  hag: "Haggai",
-  zechariah: "Zechariah",
-  zech: "Zechariah",
-  zec: "Zechariah",
-  malachi: "Malachi",
-  mal: "Malachi",
-  // NT
-  matthew: "Matthew",
-  matt: "Matthew",
-  mat: "Matthew",
-  mt: "Matthew",
-  mark: "Mark",
-  mrk: "Mark",
-  mk: "Mark",
-  luke: "Luke",
-  luk: "Luke",
-  lk: "Luke",
-  john: "John",
-  jhn: "John",
-  jn: "John",
-  acts: "Acts",
-  romans: "Romans",
-  rom: "Romans",
-  "1 corinthians": "1 Corinthians",
-  "1 cor": "1 Corinthians",
-  "1cor": "1 Corinthians",
-  "2 corinthians": "2 Corinthians",
-  "2 cor": "2 Corinthians",
-  "2cor": "2 Corinthians",
-  galatians: "Galatians",
-  gal: "Galatians",
-  ephesians: "Ephesians",
-  eph: "Ephesians",
-  philippians: "Philippians",
-  phil: "Philippians",
-  php: "Philippians",
-  colossians: "Colossians",
-  col: "Colossians",
-  "1 thessalonians": "1 Thessalonians",
-  "1 thess": "1 Thessalonians",
-  "1 thes": "1 Thessalonians",
-  "1thess": "1 Thessalonians",
-  "2 thessalonians": "2 Thessalonians",
-  "2 thess": "2 Thessalonians",
-  "2 thes": "2 Thessalonians",
-  "2thess": "2 Thessalonians",
-  "1 timothy": "1 Timothy",
-  "1 tim": "1 Timothy",
-  "1tim": "1 Timothy",
-  "2 timothy": "2 Timothy",
-  "2 tim": "2 Timothy",
-  "2tim": "2 Timothy",
-  titus: "Titus",
-  tit: "Titus",
-  philemon: "Philemon",
-  phlm: "Philemon",
-  phm: "Philemon",
-  hebrews: "Hebrews",
-  heb: "Hebrews",
-  james: "James",
-  jas: "James",
-  "1 peter": "1 Peter",
-  "1 pet": "1 Peter",
-  "1pet": "1 Peter",
-  "1 pe": "1 Peter",
-  "2 peter": "2 Peter",
-  "2 pet": "2 Peter",
-  "2pet": "2 Peter",
-  "2 pe": "2 Peter",
-  "1 john": "1 John",
-  "1 jn": "1 John",
-  "1jn": "1 John",
-  "1 jhn": "1 John",
-  "2 john": "2 John",
-  "2 jn": "2 John",
-  "2jn": "2 John",
-  "2 jhn": "2 John",
-  "3 john": "3 John",
-  "3 jn": "3 John",
-  "3jn": "3 John",
-  "3 jhn": "3 John",
-  jude: "Jude",
-  revelation: "Revelation",
-  revelations: "Revelation",
-  rev: "Revelation",
-};
+function addNumberedBookAliases(
+  map: Record<string, string>,
+  num: 1 | 2 | 3,
+  canonical: string,
+  stems: string[]
+) {
+  const prefixes =
+    num === 1
+      ? ["1", "i", "1st"]
+      : num === 2
+      ? ["2", "ii", "2nd"]
+      : ["3", "iii", "3rd"];
+
+  for (const p of prefixes) {
+    for (const stem of stems) {
+      map[`${p} ${stem}`] = canonical;
+      if (p === "1" || p === "2" || p === "3") {
+        map[`${p}${stem}`] = canonical;
+      }
+    }
+  }
+}
 
 /**
- * Aliases that are everyday English words or very short abbreviations —
- * only auto-link these when an explicit ":verse" is present (e.g., "Job 1:1", "Mark 2:5")
- * so prose like "Job 1 was hard" or "ex 2" is never falsely linked.
+ * Comprehensive English Bible book & abbreviation dictionary (all 66 books):
+ * covers full names, 3-4 letter church/ESV/NIV abbreviations, SBL 2-letter codes,
+ * compact forms ("1Cor", "1Jn"), Roman numerals ("I Cor", "II Tim"), and ordinals ("1st John").
+ */
+export const BOOK_ALIASES: Record<string, string> = (() => {
+  const m: Record<string, string> = {
+    // Old Testament
+    genesis: "Genesis",
+    gen: "Genesis",
+    gn: "Genesis",
+    ge: "Genesis",
+    exodus: "Exodus",
+    exod: "Exodus",
+    exo: "Exodus",
+    ex: "Exodus",
+    leviticus: "Leviticus",
+    lev: "Leviticus",
+    lv: "Leviticus",
+    le: "Leviticus",
+    numbers: "Numbers",
+    num: "Numbers",
+    nm: "Numbers",
+    nu: "Numbers",
+    nb: "Numbers",
+    deuteronomy: "Deuteronomy",
+    deut: "Deuteronomy",
+    deu: "Deuteronomy",
+    dt: "Deuteronomy",
+    de: "Deuteronomy",
+    joshua: "Joshua",
+    josh: "Joshua",
+    jos: "Joshua",
+    jsh: "Joshua",
+    judges: "Judges",
+    judg: "Judges",
+    jdgs: "Judges",
+    jdg: "Judges",
+    jg: "Judges",
+    ruth: "Ruth",
+    rth: "Ruth",
+    ru: "Ruth",
+    ezra: "Ezra",
+    ezr: "Ezra",
+    nehemiah: "Nehemiah",
+    neh: "Nehemiah",
+    ne: "Nehemiah",
+    esther: "Esther",
+    esth: "Esther",
+    est: "Esther",
+    es: "Esther",
+    job: "Job",
+    jb: "Job",
+    psalms: "Psalms",
+    psalm: "Psalms",
+    psa: "Psalms",
+    psm: "Psalms",
+    pss: "Psalms",
+    ps: "Psalms",
+    proverbs: "Proverbs",
+    prov: "Proverbs",
+    pro: "Proverbs",
+    prv: "Proverbs",
+    pr: "Proverbs",
+    ecclesiastes: "Ecclesiastes",
+    eccles: "Ecclesiastes",
+    eccl: "Ecclesiastes",
+    ecc: "Ecclesiastes",
+    ec: "Ecclesiastes",
+    qoh: "Ecclesiastes",
+    "song of solomon": "Song of Solomon",
+    "song of songs": "Song of Solomon",
+    canticles: "Song of Solomon",
+    cant: "Song of Solomon",
+    song: "Song of Solomon",
+    sng: "Song of Solomon",
+    sos: "Song of Solomon",
+    sg: "Song of Solomon",
+    isaiah: "Isaiah",
+    isa: "Isaiah",
+    is: "Isaiah",
+    jeremiah: "Jeremiah",
+    jerimiah: "Jeremiah",
+    jer: "Jeremiah",
+    jr: "Jeremiah",
+    je: "Jeremiah",
+    lamentations: "Lamentations",
+    lam: "Lamentations",
+    la: "Lamentations",
+    ezekiel: "Ezekiel",
+    ezek: "Ezekiel",
+    eze: "Ezekiel",
+    ezk: "Ezekiel",
+    ez: "Ezekiel",
+    daniel: "Daniel",
+    dan: "Daniel",
+    dn: "Daniel",
+    da: "Daniel",
+    hosea: "Hosea",
+    hos: "Hosea",
+    ho: "Hosea",
+    joel: "Joel",
+    joe: "Joel",
+    jl: "Joel",
+    amos: "Amos",
+    amo: "Amos",
+    am: "Amos",
+    obadiah: "Obadiah",
+    obad: "Obadiah",
+    oba: "Obadiah",
+    ob: "Obadiah",
+    jonah: "Jonah",
+    jon: "Jonah",
+    jnh: "Jonah",
+    micah: "Micah",
+    mic: "Micah",
+    mc: "Micah",
+    nahum: "Nahum",
+    nah: "Nahum",
+    nam: "Nahum",
+    na: "Nahum",
+    habakkuk: "Habakkuk",
+    hab: "Habakkuk",
+    hb: "Habakkuk",
+    zephaniah: "Zephaniah",
+    zeph: "Zephaniah",
+    zep: "Zephaniah",
+    zp: "Zephaniah",
+    haggai: "Haggai",
+    hag: "Haggai",
+    hg: "Haggai",
+    zechariah: "Zechariah",
+    zech: "Zechariah",
+    zec: "Zechariah",
+    zc: "Zechariah",
+    malachi: "Malachi",
+    mal: "Malachi",
+    ml: "Malachi",
+
+    // New Testament
+    matthew: "Matthew",
+    matt: "Matthew",
+    mat: "Matthew",
+    mt: "Matthew",
+    mark: "Mark",
+    mrk: "Mark",
+    mk: "Mark",
+    mr: "Mark",
+    luke: "Luke",
+    luk: "Luke",
+    lk: "Luke",
+    john: "John",
+    jhn: "John",
+    joh: "John",
+    jn: "John",
+    acts: "Acts",
+    act: "Acts",
+    ac: "Acts",
+    romans: "Romans",
+    rom: "Romans",
+    rm: "Romans",
+    ro: "Romans",
+    galatians: "Galatians",
+    gal: "Galatians",
+    ga: "Galatians",
+    ephesians: "Ephesians",
+    ephes: "Ephesians",
+    eph: "Ephesians",
+    ep: "Ephesians",
+    philippians: "Philippians",
+    phil: "Philippians",
+    php: "Philippians",
+    phl: "Philippians",
+    pp: "Philippians",
+    colossians: "Colossians",
+    col: "Colossians",
+    co: "Colossians",
+    titus: "Titus",
+    tit: "Titus",
+    ti: "Titus",
+    philemon: "Philemon",
+    philem: "Philemon",
+    phile: "Philemon",
+    phlm: "Philemon",
+    phm: "Philemon",
+    pm: "Philemon",
+    hebrews: "Hebrews",
+    heb: "Hebrews",
+    he: "Hebrews",
+    james: "James",
+    jas: "James",
+    jam: "James",
+    jms: "James",
+    jm: "James",
+    jude: "Jude",
+    jud: "Jude",
+    jd: "Jude",
+    revelation: "Revelation",
+    revelations: "Revelation",
+    rev: "Revelation",
+    rv: "Revelation",
+    re: "Revelation",
+    apoc: "Revelation",
+  };
+
+  addNumberedBookAliases(m, 1, "1 Samuel", ["samuel", "sam", "sa", "sm"]);
+  addNumberedBookAliases(m, 2, "2 Samuel", ["samuel", "sam", "sa", "sm"]);
+  addNumberedBookAliases(m, 1, "1 Kings", ["kings", "king", "kgs", "kg", "ki"]);
+  addNumberedBookAliases(m, 2, "2 Kings", ["kings", "king", "kgs", "kg", "ki"]);
+  addNumberedBookAliases(m, 1, "1 Chronicles", ["chronicles", "chron", "chr", "ch"]);
+  addNumberedBookAliases(m, 2, "2 Chronicles", ["chronicles", "chron", "chr", "ch"]);
+  addNumberedBookAliases(m, 1, "1 Corinthians", ["corinthians", "cor", "co"]);
+  addNumberedBookAliases(m, 2, "2 Corinthians", ["corinthians", "cor", "co"]);
+  addNumberedBookAliases(m, 1, "1 Thessalonians", ["thessalonians", "thess", "thes", "th"]);
+  addNumberedBookAliases(m, 2, "2 Thessalonians", ["thessalonians", "thess", "thes", "th"]);
+  addNumberedBookAliases(m, 1, "1 Timothy", ["timothy", "tim", "tm", "ti"]);
+  addNumberedBookAliases(m, 2, "2 Timothy", ["timothy", "tim", "tm", "ti"]);
+  addNumberedBookAliases(m, 1, "1 Peter", ["peter", "pet", "pe", "pt"]);
+  addNumberedBookAliases(m, 2, "2 Peter", ["peter", "pet", "pe", "pt"]);
+  addNumberedBookAliases(m, 1, "1 John", ["john", "jhn", "joh", "jn"]);
+  addNumberedBookAliases(m, 2, "2 John", ["john", "jhn", "joh", "jn"]);
+  addNumberedBookAliases(m, 3, "3 John", ["john", "jhn", "joh", "jn"]);
+
+  return m;
+})();
+
+export function resolveBookAlias(rawBook: string): string | null {
+  const cleaned = rawBook
+    .toLowerCase()
+    .replace(/\./g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return BOOK_ALIASES[cleaned] || null;
+}
+
+/**
+ * Short 2-letter codes or everyday English words that only auto-link in freeform
+ * notes when an explicit ":verse" is present (e.g., "Is 53:5", "Am 5:24", "He 11:1",
+ * "Job 1:1", "Mark 2:5"), avoiding false links in normal prose like "is 5" or "9 am".
+ * Clear 3+ letter abbreviations like "Gen 1", "Jer 29", "Rom 8", "Ps 23" link both ways!
  */
 const REQUIRE_VERSE_COLON = new Set([
+  "gn",
   "ge",
   "ex",
+  "lv",
+  "le",
+  "nm",
+  "nu",
+  "nb",
   "dt",
+  "de",
+  "jg",
+  "ru",
+  "ne",
+  "es",
+  "jb",
   "pr",
+  "ec",
+  "sg",
+  "is",
+  "jr",
+  "je",
+  "la",
+  "ez",
+  "dn",
+  "da",
+  "ho",
+  "jl",
+  "am",
+  "ob",
+  "mc",
+  "na",
+  "hb",
+  "zp",
+  "hg",
+  "zc",
+  "ml",
   "mt",
   "mk",
+  "mr",
   "lk",
   "jn",
+  "ac",
+  "rm",
+  "ro",
+  "ga",
+  "ep",
+  "pp",
+  "co",
+  "ti",
+  "pm",
+  "he",
+  "jm",
+  "jd",
+  "rv",
+  "re",
+  // Everyday English words / names that need ":verse" to avoid prose false positives
   "job",
   "song",
   "acts",
+  "act",
   "numbers",
   "judges",
   "ruth",
   "mark",
   "jon",
+  "joe",
   "pro",
   "tit",
   "sos",
+  "est",
+  "jam",
 ]);
 
 const BOOK_CHAPTERS_MAP = new Map<string, number>(
@@ -229,9 +354,11 @@ const BOOK_CHAPTERS_MAP = new Map<string, number>(
 
 const ESCAPED_ALIASES = Object.keys(BOOK_ALIASES)
   .sort((a, b) => b.length - a.length)
-  .map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"));
+  .map((alias) =>
+    alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")
+  );
 
-// Matches Book + Chapter + optional :Verse(s) (including ranges like 1:1-5 or 1:1–5)
+// Matches Book/Abbrev + optional "." + Chapter + optional :Verse(s) (including ranges like 29:11-13)
 const SCRIPTURE_REGEX = new RegExp(
   `(?<![A-Za-z0-9])(${ESCAPED_ALIASES.join("|")})\\.?\\s+(\\d{1,3})(?:\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*\\d{1,3})?)?(?![A-Za-z0-9:])`,
   "gi"
@@ -246,39 +373,54 @@ function resolveMatch(
   verseStr: string | undefined,
   trailingText: string
 ): Omit<DetectedScriptureRef, "matchText"> | null {
-  const key = rawBook.toLowerCase().replace(/\s+/g, " ").trim();
+  const key = rawBook.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
   const canonicalBook = BOOK_ALIASES[key];
   if (!canonicalBook) return null;
 
   const maxChapters = BOOK_CHAPTERS_MAP.get(canonicalBook);
   if (!maxChapters) return null;
 
-  const chapter = parseInt(chapterStr, 10);
-  if (!Number.isFinite(chapter) || chapter < 1 || chapter > maxChapters) {
+  const firstNum = parseInt(chapterStr, 10);
+  if (!Number.isFinite(firstNum) || firstNum < 1) {
     return null;
   }
 
   if (verseStr) {
+    if (firstNum > maxChapters) return null;
     const verse = parseInt(verseStr, 10);
     if (!Number.isFinite(verse) || verse < 1 || verse > 176) {
       return null;
     }
     return {
-      canonical: `${canonicalBook} ${chapter}:${verse}`,
+      canonical: `${canonicalBook} ${firstNum}:${verse}`,
       book: canonicalBook,
-      chapter,
+      chapter: firstNum,
       verse,
     };
   }
 
-  // Chapter-only reference (e.g. "John 15" or "Romans 8")
+  // Single-chapter books written as "Jude 24" or "Phlm 6"
+  if (maxChapters === 1 && firstNum > 1 && firstNum <= 25) {
+    if (REQUIRE_VERSE_COLON.has(key) || NON_CHAPTER_FOLLOWERS.test(trailingText)) {
+      return null;
+    }
+    return {
+      canonical: `${canonicalBook} 1:${firstNum}`,
+      book: canonicalBook,
+      chapter: 1,
+      verse: firstNum,
+    };
+  }
+
+  // Chapter-only reference (e.g. "Gen 1", "Jer 29", "Romans 8", "Ps 23")
+  if (firstNum > maxChapters) return null;
   if (REQUIRE_VERSE_COLON.has(key)) return null;
   if (NON_CHAPTER_FOLLOWERS.test(trailingText)) return null;
 
   return {
-    canonical: `${canonicalBook} ${chapter}`,
+    canonical: `${canonicalBook} ${firstNum}`,
     book: canonicalBook,
-    chapter,
+    chapter: firstNum,
   };
 }
 
@@ -302,7 +444,10 @@ export function extractScriptureReferences(text: string): DetectedScriptureRef[]
   let match: RegExpExecArray | null;
   while ((match = SCRIPTURE_REGEX.exec(text)) !== null) {
     const [full, rawBook, chapterStr, verseStr] = match;
-    const trailing = text.slice(match.index + full.length, match.index + full.length + 24);
+    const trailing = text.slice(
+      match.index + full.length,
+      match.index + full.length + 24
+    );
     const resolved = resolveMatch(rawBook, chapterStr, verseStr, trailing);
     if (!resolved) continue;
     if (!seen.has(resolved.canonical)) {
@@ -325,7 +470,6 @@ export function linkifyScriptureInHtml(safeHtml: string): string {
 
   return segments
     .map((segment, idx) => {
-      // Odd indices are HTML tags
       if (idx % 2 === 1) {
         if (/^<span\b[^>]*class="[^"]*lamp-scripture-link/i.test(segment)) {
           insideLinkDepth += 1;
@@ -340,8 +484,17 @@ export function linkifyScriptureInHtml(safeHtml: string): string {
       SCRIPTURE_REGEX.lastIndex = 0;
       return segment.replace(
         SCRIPTURE_REGEX,
-        (full, rawBook: string, chapterStr: string, verseStr: string | undefined, offset: number) => {
-          const trailing = segment.slice(offset + full.length, offset + full.length + 24);
+        (
+          full,
+          rawBook: string,
+          chapterStr: string,
+          verseStr: string | undefined,
+          offset: number
+        ) => {
+          const trailing = segment.slice(
+            offset + full.length,
+            offset + full.length + 24
+          );
           const resolved = resolveMatch(rawBook, chapterStr, verseStr, trailing);
           if (!resolved) return full;
 

@@ -89,17 +89,144 @@ export function parseScriptureReference(ref: string): {
   chapter: number;
   verse?: number;
 } | null {
-  const cleaned = ref.trim().replace(/\s+/g, " ");
+  const cleaned = ref
+    .trim()
+    .replace(/\./g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^1st\s+/i, "1 ")
+    .replace(/^2nd\s+/i, "2 ")
+    .replace(/^3rd\s+/i, "3 ")
+    .replace(/^III\s+/i, "3 ")
+    .replace(/^II\s+/i, "2 ")
+    .replace(/^I\s+/i, "1 ")
+    .replace(/^([1-3])([A-Za-z])/i, "$1 $2");
   const match = cleaned.match(
     /^((?:[1-3]\s+)?[A-Za-z]+(?:\s+of\s+[A-Za-z]+)?)\s+(\d+)(?::(\d+))?/i
   );
   if (!match) return null;
 
   const rawBook = match[1].toLowerCase().trim();
-  const chapter = parseInt(match[2], 10);
-  const verse = match[3] ? parseInt(match[3], 10) : undefined;
+  const firstNum = parseInt(match[2], 10);
+  const explicitVerse = match[3] ? parseInt(match[3], 10) : undefined;
 
+  const SHORT_BOOK_MAP: Record<string, string> = {
+    gn: "Genesis",
+    ge: "Genesis",
+    ex: "Exodus",
+    lv: "Leviticus",
+    le: "Leviticus",
+    nm: "Numbers",
+    nu: "Numbers",
+    dt: "Deuteronomy",
+    de: "Deuteronomy",
+    jsh: "Joshua",
+    jdg: "Judges",
+    jdgs: "Judges",
+    jg: "Judges",
+    rth: "Ruth",
+    ru: "Ruth",
+    "1 sa": "1 Samuel",
+    "1 sm": "1 Samuel",
+    "2 sa": "2 Samuel",
+    "2 sm": "2 Samuel",
+    "1 ki": "1 Kings",
+    "1 kg": "1 Kings",
+    "1 kgs": "1 Kings",
+    "2 ki": "2 Kings",
+    "2 kg": "2 Kings",
+    "2 kgs": "2 Kings",
+    "1 ch": "1 Chronicles",
+    "2 ch": "2 Chronicles",
+    ne: "Nehemiah",
+    es: "Esther",
+    jb: "Job",
+    ps: "Psalms",
+    psa: "Psalms",
+    psm: "Psalms",
+    pss: "Psalms",
+    psalm: "Psalms",
+    prv: "Proverbs",
+    pr: "Proverbs",
+    ec: "Ecclesiastes",
+    qoh: "Ecclesiastes",
+    "song of songs": "Song of Solomon",
+    sng: "Song of Solomon",
+    sos: "Song of Solomon",
+    sg: "Song of Solomon",
+    cant: "Song of Solomon",
+    is: "Isaiah",
+    jerimiah: "Jeremiah",
+    jr: "Jeremiah",
+    je: "Jeremiah",
+    la: "Lamentations",
+    ezk: "Ezekiel",
+    ez: "Ezekiel",
+    dn: "Daniel",
+    da: "Daniel",
+    ho: "Hosea",
+    jl: "Joel",
+    am: "Amos",
+    ob: "Obadiah",
+    jnh: "Jonah",
+    mc: "Micah",
+    nam: "Nahum",
+    na: "Nahum",
+    hb: "Habakkuk",
+    zp: "Zephaniah",
+    hg: "Haggai",
+    zc: "Zechariah",
+    ml: "Malachi",
+    mt: "Matthew",
+    mk: "Mark",
+    mrk: "Mark",
+    mr: "Mark",
+    lk: "Luke",
+    jn: "John",
+    jhn: "John",
+    ac: "Acts",
+    rm: "Romans",
+    ro: "Romans",
+    "1 co": "1 Corinthians",
+    "2 co": "2 Corinthians",
+    ga: "Galatians",
+    ep: "Ephesians",
+    php: "Philippians",
+    phl: "Philippians",
+    pp: "Philippians",
+    co: "Colossians",
+    "1 th": "1 Thessalonians",
+    "2 th": "2 Thessalonians",
+    "1 ti": "1 Timothy",
+    "1 tm": "1 Timothy",
+    "2 ti": "2 Timothy",
+    "2 tm": "2 Timothy",
+    ti: "Titus",
+    phlm: "Philemon",
+    phm: "Philemon",
+    pm: "Philemon",
+    he: "Hebrews",
+    jas: "James",
+    jms: "James",
+    jm: "James",
+    "1 pe": "1 Peter",
+    "1 pt": "1 Peter",
+    "2 pe": "2 Peter",
+    "2 pt": "2 Peter",
+    "1 jn": "1 John",
+    "1 jhn": "1 John",
+    "2 jn": "2 John",
+    "2 jhn": "2 John",
+    "3 jn": "3 John",
+    "3 jhn": "3 John",
+    jd: "Jude",
+    rv: "Revelation",
+    re: "Revelation",
+    revelations: "Revelation",
+  };
+
+  const mappedName = SHORT_BOOK_MAP[rawBook];
   const found = BIBLE_BOOKS.find((b) => {
+    if (mappedName) return b.name === mappedName;
     const lowerName = b.name.toLowerCase();
     const lowerAbbr = b.abbr.toLowerCase();
     if (lowerName === rawBook || lowerAbbr === rawBook) return true;
@@ -109,6 +236,17 @@ export function parseScriptureReference(ref: string): {
   });
 
   if (!found) return null;
-  const clampedChapter = Math.max(1, Math.min(found.chapters, chapter));
-  return { book: found.name, usfm: found.usfm, chapter: clampedChapter, verse };
+
+  // Handle single-chapter shortcuts like "Jude 24" or "Phlm 6"
+  if (found.chapters === 1 && !explicitVerse && firstNum > 1 && firstNum <= 25) {
+    return { book: found.name, usfm: found.usfm, chapter: 1, verse: firstNum };
+  }
+
+  const clampedChapter = Math.max(1, Math.min(found.chapters, firstNum));
+  return {
+    book: found.name,
+    usfm: found.usfm,
+    chapter: clampedChapter,
+    verse: explicitVerse,
+  };
 }
